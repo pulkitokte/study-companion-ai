@@ -1,5 +1,3 @@
-// FILE PATH: frontend/src/components/quiz/TimerBar.jsx
-
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Clock } from "lucide-react";
@@ -11,60 +9,54 @@ export default function TimerBar({
   accentColor = "#00FFC8",
 }) {
   const [remaining, setRemaining] = useState(duration);
-  const intervalRef = useRef(null);
+  const ref = useRef(null);
 
-  // Reset when question changes (duration prop changes)
   useEffect(() => {
     setRemaining(duration);
   }, [duration]);
 
   useEffect(() => {
     if (paused) {
-      clearInterval(intervalRef.current);
+      clearInterval(ref.current);
       return;
     }
-
-    intervalRef.current = setInterval(() => {
+    ref.current = setInterval(() => {
       setRemaining((prev) => {
         if (prev <= 1) {
-          clearInterval(intervalRef.current);
+          clearInterval(ref.current);
           onExpire?.();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
-
-    return () => clearInterval(intervalRef.current);
+    return () => clearInterval(ref.current);
   }, [paused, duration, onExpire]);
 
   const pct = (remaining / duration) * 100;
   const isDanger = pct <= 25;
   const isWarn = pct <= 50;
-
-  const barColor = isDanger ? "#FF3C3C" : isWarn ? "#FFB347" : accentColor;
+  const color = isDanger ? "#FF3C3C" : isWarn ? "#FFB347" : accentColor;
 
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <Clock size={11} style={{ color: barColor }} />
+          <Clock size={11} style={{ color }} />
           <span className="text-[10px] text-white/30 uppercase tracking-widest">
             Time
           </span>
         </div>
         <motion.span
           key={remaining}
-          initial={{ scale: isDanger ? 1.2 : 1 }}
+          initial={{ scale: isDanger ? 1.15 : 1 }}
           animate={{ scale: 1 }}
           className="text-[13px] font-black tabular-nums"
-          style={{ color: barColor }}
+          style={{ color }}
         >
           {remaining}s
         </motion.span>
       </div>
-
-      {/* Track */}
       <div className="relative h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
         <motion.div
           className="absolute top-0 left-0 h-full rounded-full"
@@ -72,21 +64,18 @@ export default function TimerBar({
           transition={{ duration: 0.9, ease: "linear" }}
           style={{
             background: isDanger
-              ? "linear-gradient(90deg, #FF3C3C, #FF6B6B)"
+              ? "linear-gradient(90deg,#FF3C3C,#FF6B6B)"
               : isWarn
-                ? "linear-gradient(90deg, #FFB347, #FFD700)"
-                : `linear-gradient(90deg, ${accentColor}80, ${accentColor})`,
-            boxShadow: `0 0 8px ${barColor}50`,
+                ? "linear-gradient(90deg,#FFB347,#FFD700)"
+                : `linear-gradient(90deg,${accentColor}80,${accentColor})`,
+            boxShadow: `0 0 8px ${color}50`,
           }}
         />
-
-        {/* Danger pulse overlay */}
         {isDanger && (
           <motion.div
-            className="absolute inset-0 rounded-full"
-            animate={{ opacity: [0, 0.3, 0] }}
-            transition={{ repeat: Infinity, duration: 0.6 }}
-            style={{ background: "#FF3C3C" }}
+            animate={{ opacity: [0, 0.35, 0] }}
+            transition={{ repeat: Infinity, duration: 0.55 }}
+            className="absolute inset-0 rounded-full bg-red-500"
           />
         )}
       </div>
