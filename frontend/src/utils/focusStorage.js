@@ -1,78 +1,73 @@
-const FOCUS_KEY = "studymind_focus_history";
-const MAX_SESSIONS = 100;
+const KEY = 'studymind_focus_history'
+const MAX = 150
 
 export function saveFocusSession(session) {
   try {
-    const history = getFocusHistory();
+    const history = getFocusHistory()
     const entry = {
-      id: `fs-${Date.now()}`,
-      date: new Date().toISOString(),
-      ...session,
-    };
-    const updated = [entry, ...history].slice(0, MAX_SESSIONS);
-    localStorage.setItem(FOCUS_KEY, JSON.stringify(updated));
-    return entry;
-  } catch {
-    return null;
-  }
+      id:              `fs-${Date.now()}`,
+      date:            new Date().toISOString(),
+      mode:            session.mode            ?? 'pomodoro',
+      durationMinutes: session.durationMinutes ?? 0,
+      subject:         session.subject         ?? '',
+      goal:            session.goal            ?? '',
+      xpEarned:        session.xpEarned        ?? 0,
+      pomodoroCount:   session.pomodoroCount   ?? 0,
+      completed:       session.completed       ?? true,
+    }
+    localStorage.setItem(KEY, JSON.stringify([entry, ...history].slice(0, MAX)))
+    return entry
+  } catch { return null }
 }
 
 export function getFocusHistory() {
   try {
-    const raw = localStorage.getItem(FOCUS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+    const raw = localStorage.getItem(KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
 }
 
 export function clearFocusHistory() {
-  try {
-    localStorage.removeItem(FOCUS_KEY);
-  } catch {
-    /* ignore */
-  }
+  try { localStorage.removeItem(KEY) } catch { /* ignore */ }
 }
 
 export function getFocusStats() {
-  const history = getFocusHistory();
-  if (!history.length)
+  const h = getFocusHistory()
+  if (!h.length) {
     return {
-      totalSessions: 0,
-      totalMinutes: 0,
-      totalXP: 0,
-      bestStreak: 0,
-      recentStreak: 0,
-      averageMinutes: 0,
-    };
+      totalSessions: 0, totalMinutes: 0, totalXP: 0,
+      recentStreak: 0, bestStreak: 0, averageMinutes: 0,
+      todayMinutes: 0, todayXP: 0, weeklyMinutes: 0,
+    }
+  }
 
-  let totalMinutes = 0,
-    totalXP = 0,
-    bestStreak = 0;
-  history.forEach((s) => {
-    totalMinutes += s.durationMinutes ?? 0;
-    totalXP += s.xpEarned ?? 0;
-    if ((s.streak ?? 0) > bestStreak) bestStreak = s.streak ?? 0;
-  });
+  const today  = new Date().toISOString().slice(0, 10)
+  const week   = new Date(); week.setDate(week.getDate() - 7)
+  let totalMinutes = 0, totalXP = 0, todayMinutes = 0, todayXP = 0, weeklyMinutes = 0
 
-  const days = new Set(
-    history.map((s) => s.date?.slice(0, 10)).filter(Boolean),
-  );
-  let streak = 0;
-  const today = new Date();
+  h.forEach(s => {
+    const m = s.durationMinutes ?? 0
+    const x = s.xpEarned       ?? 0
+    totalMinutes += m; totalXP += x
+    if (s.date?.slice(0, 10) === today) { todayMinutes += m; todayXP += x }
+    if (new Date(s.date || 0) > week)    weeklyMinutes += m
+  })
+
+  const days = new Set(h.map(s => s.date?.slice(0, 10)).filter(Boolean))
+  let streak = 0
+  const now  = new Date()
   for (let i = 0; i < 365; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    if (days.has(d.toISOString().slice(0, 10))) streak++;
-    else break;
+    const d = new Date(now); d.setDate(d.getDate() - i)
+    if (days.has(d.toISOString().slice(0, 10))) streak++
+    else break
   }
 
   return {
-    totalSessions: history.length,
-    totalMinutes,
-    totalXP,
-    bestStreak,
-    recentStreak: streak,
-    averageMinutes: Math.round(totalMinutes / history.length),
-  };
+    totalSessions:  h.length,
+    totalMinutes,   totalXP,
+    recentStreak:   streak,
+    bestStreak:     streak,
+    averageMinutes: Math.round(totalMinutes / h.length),
+    todayMinutes,   todayXP,   weeklyMinutes,
+  }
 }
