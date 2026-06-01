@@ -1,9 +1,5 @@
 // FILE PATH: frontend/src/components/dashboard/Sidebar.jsx
-// SIDEBAR — primary navigation. Shows all app sections.
-// On desktop: fixed left panel, can collapse to icon-only mode.
-// On mobile: slides in from left as an overlay when hamburger is tapped.
-// Uses Framer Motion for smooth entrance + hover animations.
-// Uses React Router's useLocation to highlight the active route.
+// REPLACES existing Sidebar.jsx — uses real profile data.
 
 import { NavLink, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -17,14 +13,21 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Zap,
   X,
   Flame,
   Brain,
+  Zap,
 } from "lucide-react";
+import {
+  getFirstName,
+  getDisplayName,
+  getTargetExam,
+  getUnifiedXP,
+  getUnifiedStreak,
+  getLevelFromXP,
+  getLevelProgress,
+} from "../../utils/userProfile.js";
 
-// ─── NAV ITEMS ────────────────────────────────────────────────────
-// Each item: path, icon, label, accent color for the glow effect
 const NAV_ITEMS = [
   {
     path: "/dashboard",
@@ -80,54 +83,42 @@ const BOTTOM_ITEMS = [
   },
 ];
 
-// ─── USER STATS (mock data — will be replaced with real data later) ──
-const MOCK_USER = {
-  name: "Arjun Singh",
-  exam: "UPSC 2026",
-  level: 12,
-  xp: 3240,
-  xpNeeded: 4000,
-  streak: 7,
-  title: "The Aspirant",
-};
-
-// ─── MAIN COMPONENT ────────────────────────────────────────────────
 export default function Sidebar({
   open,
   collapsed,
   onClose,
   onToggleCollapse,
 }) {
-  const location = useLocation();
-
   const sidebarWidth = collapsed ? 72 : 240;
 
   return (
     <>
-      {/* ── DESKTOP SIDEBAR ── */}
+      {/* Mobile overlay */}
+      {open && (
+        <div
+          className="fixed inset-0 z-20 bg-black/70 backdrop-blur-sm lg:hidden"
+          onClick={onClose}
+        />
+      )}
+
+      {/* Desktop */}
       <motion.aside
         animate={{ width: sidebarWidth }}
         transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-        className="
-          hidden lg:flex flex-col
-          fixed left-0 top-0 h-full z-30
-          border-r border-white/[0.06]
-          overflow-hidden
-        "
+        className="hidden lg:flex flex-col fixed left-0 top-0 h-full z-30 border-r border-white/[0.06] overflow-hidden"
         style={{
-          background: "linear-gradient(180deg, #0A0A14 0%, #06060F 100%)",
+          background: "linear-gradient(180deg,#0A0A14 0%,#06060F 100%)",
         }}
       >
         <SidebarContent
           collapsed={collapsed}
           onToggleCollapse={onToggleCollapse}
-          location={location}
           onClose={onClose}
           isDesktop
         />
       </motion.aside>
 
-      {/* ── MOBILE SIDEBAR ── */}
+      {/* Mobile */}
       <AnimatePresence>
         {open && (
           <motion.aside
@@ -135,20 +126,14 @@ export default function Sidebar({
             animate={{ x: 0 }}
             exit={{ x: -280 }}
             transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-            className="
-              flex lg:hidden flex-col
-              fixed left-0 top-0 h-full z-30 w-[240px]
-              border-r border-white/[0.06]
-              overflow-hidden
-            "
+            className="flex lg:hidden flex-col fixed left-0 top-0 h-full z-30 w-[240px] border-r border-white/[0.06] overflow-hidden"
             style={{
-              background: "linear-gradient(180deg, #0A0A14 0%, #06060F 100%)",
+              background: "linear-gradient(180deg,#0A0A14 0%,#06060F 100%)",
             }}
           >
             <SidebarContent
               collapsed={false}
               onToggleCollapse={onToggleCollapse}
-              location={location}
               onClose={onClose}
               isDesktop={false}
             />
@@ -159,32 +144,37 @@ export default function Sidebar({
   );
 }
 
-// ─── SIDEBAR INNER CONTENT ─────────────────────────────────────────
-// Extracted so both desktop + mobile share identical markup
-function SidebarContent({
-  collapsed,
-  onToggleCollapse,
-  location,
-  onClose,
-  isDesktop,
-}) {
-  const xpPercent = Math.round((MOCK_USER.xp / MOCK_USER.xpNeeded) * 100);
+function SidebarContent({ collapsed, onToggleCollapse, onClose, isDesktop }) {
+  const location = useLocation();
+
+  // Live data
+  const { totalXP } = getUnifiedXP();
+  const streak = getUnifiedStreak();
+  const { level, pct } = getLevelProgress(totalXP);
+  const displayName = getDisplayName("Scholar");
+  const targetExam = getTargetExam();
+  const initials =
+    displayName
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "SC";
 
   return (
     <div className="flex flex-col h-full select-none">
-      {/* ── LOGO / BRAND ── */}
-      <div className="relative flex items-center justify-between px-4 h-[64px] shrink-0 border-b border-white/[0.05]">
+      {/* Logo */}
+      <div className="flex items-center justify-between px-4 h-[64px] shrink-0 border-b border-white/[0.05]">
         <AnimatePresence mode="wait">
           {!collapsed ? (
             <motion.div
-              key="full-logo"
+              key="full"
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -10 }}
               transition={{ duration: 0.2 }}
               className="flex items-center gap-2.5"
             >
-              {/* Hexagon logo mark */}
               <div className="relative w-8 h-8 shrink-0">
                 <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-[#00FFC8] to-[#7C6FFF] opacity-20 blur-md" />
                 <div className="relative w-8 h-8 rounded-lg bg-gradient-to-br from-[#00FFC8] to-[#7C6FFF] flex items-center justify-center">
@@ -202,11 +192,10 @@ function SidebarContent({
             </motion.div>
           ) : (
             <motion.div
-              key="icon-logo"
+              key="icon"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
               className="relative w-8 h-8 mx-auto"
             >
               <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-[#00FFC8] to-[#7C6FFF] opacity-20 blur-md" />
@@ -216,8 +205,6 @@ function SidebarContent({
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Mobile close button */}
         {!isDesktop && (
           <button
             onClick={onClose}
@@ -228,7 +215,7 @@ function SidebarContent({
         )}
       </div>
 
-      {/* ── USER PROFILE CARD ── */}
+      {/* User card */}
       <AnimatePresence mode="wait">
         {!collapsed ? (
           <motion.div
@@ -239,68 +226,52 @@ function SidebarContent({
             transition={{ duration: 0.2 }}
             className="px-3 py-4 border-b border-white/[0.05] shrink-0"
           >
-            {/* Avatar + name row */}
             <div className="flex items-center gap-3 mb-3">
-              {/* Avatar with gradient ring */}
               <div className="relative shrink-0">
                 <div className="absolute -inset-0.5 rounded-full bg-gradient-to-br from-[#00FFC8] to-[#7C6FFF] opacity-70" />
                 <div className="relative w-9 h-9 rounded-full bg-[#0F0F1E] flex items-center justify-center text-sm font-bold text-white">
-                  {MOCK_USER.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
+                  {initials}
                 </div>
               </div>
               <div className="min-w-0">
                 <p className="text-[12px] font-semibold text-white truncate">
-                  {MOCK_USER.name}
+                  {displayName}
                 </p>
                 <p className="text-[10px] text-[#00FFC8]/70 truncate">
-                  {MOCK_USER.exam}
+                  {targetExam}
                 </p>
               </div>
             </div>
-
-            {/* Level + Streak row */}
             <div className="flex items-center gap-2 mb-2.5">
-              {/* Level badge */}
               <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#7C6FFF]/10 border border-[#7C6FFF]/20">
                 <Zap size={10} className="text-[#7C6FFF]" />
                 <span className="text-[10px] font-bold text-[#7C6FFF]">
-                  LVL {MOCK_USER.level}
+                  LVL {level}
                 </span>
               </div>
-              {/* Streak badge */}
               <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#FF6B2B]/10 border border-[#FF6B2B]/20">
                 <Flame size={10} className="text-[#FF6B2B]" />
                 <span className="text-[10px] font-bold text-[#FF6B2B]">
-                  {MOCK_USER.streak}d
+                  {streak}d
                 </span>
               </div>
-              {/* Title */}
-              <span className="text-[9px] text-white/30 truncate">
-                {MOCK_USER.title}
-              </span>
             </div>
-
-            {/* XP Progress bar */}
             <div>
               <div className="flex justify-between mb-1">
                 <span className="text-[9px] text-white/30 tracking-wider uppercase">
                   XP Progress
                 </span>
                 <span className="text-[9px] text-[#00FFC8]/60">
-                  {MOCK_USER.xp}/{MOCK_USER.xpNeeded}
+                  {totalXP.toLocaleString()}
                 </span>
               </div>
               <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
                 <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${xpPercent}%` }}
-                  transition={{ duration: 1.2, delay: 0.3, ease: "easeOut" }}
-                  className="h-full rounded-full relative"
+                  animate={{ width: `${pct}%` }}
+                  transition={{ duration: 1.2, ease: "easeOut" }}
+                  className="h-full rounded-full"
                   style={{
-                    background: "linear-gradient(90deg, #00FFC8, #7C6FFF)",
+                    background: "linear-gradient(90deg,#00FFC8,#7C6FFF)",
                     boxShadow: "0 0 8px rgba(0,255,200,0.5)",
                   }}
                 />
@@ -308,7 +279,6 @@ function SidebarContent({
             </div>
           </motion.div>
         ) : (
-          /* Collapsed: just show avatar centered */
           <motion.div
             key="profile-mini"
             initial={{ opacity: 0 }}
@@ -319,55 +289,46 @@ function SidebarContent({
             <div className="relative">
               <div className="absolute -inset-0.5 rounded-full bg-gradient-to-br from-[#00FFC8] to-[#7C6FFF] opacity-70" />
               <div className="relative w-9 h-9 rounded-full bg-[#0F0F1E] flex items-center justify-center text-xs font-bold text-white">
-                {MOCK_USER.name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")}
+                {initials}
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ── NAV LINKS ── */}
-      <nav className="flex-1 overflow-y-auto overflow-x-hidden py-3 px-2 space-y-0.5 scrollbar-none">
-        {/* Section label */}
+      {/* Nav */}
+      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5 scrollbar-none">
         {!collapsed && (
           <p className="px-3 mb-2 text-[9px] tracking-[0.2em] text-white/20 uppercase">
             Navigation
           </p>
         )}
-
-        {NAV_ITEMS.map((item, index) => (
+        {NAV_ITEMS.map((item, i) => (
           <NavItem
             key={item.path}
             item={item}
             collapsed={collapsed}
-            index={index}
+            index={i}
+            location={location}
           />
         ))}
       </nav>
 
-      {/* ── BOTTOM SECTION ── */}
+      {/* Bottom */}
       <div className="px-2 py-3 border-t border-white/[0.05] space-y-0.5 shrink-0">
-        {BOTTOM_ITEMS.map((item, index) => (
+        {BOTTOM_ITEMS.map((item, i) => (
           <NavItem
             key={item.path}
             item={item}
             collapsed={collapsed}
-            index={index}
+            index={i}
+            location={location}
           />
         ))}
-
-        {/* Desktop collapse toggle */}
         {isDesktop && (
           <button
             onClick={onToggleCollapse}
-            className="
-              w-full flex items-center gap-3 px-3 py-2.5 rounded-lg
-              text-white/30 hover:text-white/60
-              hover:bg-white/[0.04] transition-all duration-200 group
-            "
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/[0.04] transition-all group"
           >
             <div className="shrink-0 w-5 h-5 flex items-center justify-center">
               {collapsed ? (
@@ -392,9 +353,9 @@ function SidebarContent({
   );
 }
 
-// ─── INDIVIDUAL NAV ITEM ───────────────────────────────────────────
-function NavItem({ item, collapsed, index }) {
+function NavItem({ item, collapsed, index, location }) {
   const { path, icon: Icon, label, color, description } = item;
+  const isActive = location.pathname === path;
 
   return (
     <motion.div
@@ -405,14 +366,9 @@ function NavItem({ item, collapsed, index }) {
       <NavLink to={path}>
         {({ isActive }) => (
           <div
-            className={`
-              relative flex items-center gap-3 px-3 py-2.5 rounded-lg
-              transition-all duration-200 group cursor-pointer
-              ${isActive ? "bg-white/[0.07]" : "hover:bg-white/[0.04]"}
-            `}
+            className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group cursor-pointer ${isActive ? "bg-white/[0.07]" : "hover:bg-white/[0.04]"}`}
             title={collapsed ? label : undefined}
           >
-            {/* Active left border glow */}
             {isActive && (
               <motion.div
                 layoutId="active-indicator"
@@ -421,14 +377,7 @@ function NavItem({ item, collapsed, index }) {
                 transition={{ duration: 0.2 }}
               />
             )}
-
-            {/* Icon with glow effect when active */}
-            <div
-              className={`
-                relative shrink-0 w-5 h-5 flex items-center justify-center
-                transition-all duration-200
-              `}
-            >
+            <div className="relative shrink-0 w-5 h-5 flex items-center justify-center transition-all duration-200">
               {isActive && (
                 <div
                   className="absolute inset-0 rounded-md blur-md opacity-40"
@@ -446,42 +395,28 @@ function NavItem({ item, collapsed, index }) {
                 strokeWidth={isActive ? 2.5 : 2}
               />
             </div>
-
-            {/* Label + description */}
             {!collapsed && (
-              <div className="min-w-0 flex-1">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.15 }}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  <p
+                    className={`text-[12px] font-semibold tracking-wide leading-tight truncate ${isActive ? "text-white" : "text-white/50 group-hover:text-white/80"} transition-colors duration-200`}
                   >
-                    <p
-                      className={`
-                        text-[12px] font-semibold tracking-wide leading-tight truncate
-                        ${isActive ? "text-white" : "text-white/50 group-hover:text-white/80"}
-                        transition-colors duration-200
-                      `}
-                    >
-                      {label}
-                    </p>
-                    <p
-                      className={`
-                      text-[9px] tracking-wide truncate mt-0.5
-                      ${isActive ? "opacity-60" : "opacity-0 group-hover:opacity-40"}
-                      transition-opacity duration-200
-                    `}
-                      style={{ color: isActive ? color : "#fff" }}
-                    >
-                      {description}
-                    </p>
-                  </motion.div>
-                </AnimatePresence>
-              </div>
+                    {label}
+                  </p>
+                  <p
+                    className={`text-[9px] tracking-wide truncate mt-0.5 ${isActive ? "opacity-60" : "opacity-0 group-hover:opacity-40"} transition-opacity duration-200`}
+                    style={{ color: isActive ? color : "#fff" }}
+                  >
+                    {description}
+                  </p>
+                </motion.div>
+              </AnimatePresence>
             )}
-
-            {/* Active ping dot (collapsed mode) */}
             {isActive && collapsed && (
               <div
                 className="absolute right-1.5 top-1.5 w-1.5 h-1.5 rounded-full"
