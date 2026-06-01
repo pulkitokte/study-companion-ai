@@ -1,32 +1,27 @@
-import { motion } from "framer-motion";
-import { User } from "lucide-react";
-import { useChat } from "../../context/ChatContext.jsx";
+import { motion } from 'framer-motion'
+import { User } from 'lucide-react'
+import { useAI } from '../../context/AIContext.jsx'
 
-function formatTime(date) {
-  if (!date) return "";
-  try {
-    const d = date instanceof Date ? date : new Date(date);
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  } catch {
-    return "";
-  }
+function formatTime(iso) {
+  if (!iso) return ''
+  try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+  catch { return '' }
 }
 
 export default function ChatMessage({ message }) {
-  const { mode } = useChat();
+  const { mode } = useAI()
+  if (!message) return null
 
-  if (!message) return null;
-
-  const isUser = message.role === "user";
-  const content = message.content ?? "";
-  const time = formatTime(message.timestamp);
+  const isUser  = message.role === 'user'
+  const content = message.content ?? ''
+  const time    = formatTime(message.timestamp)
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 14, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.28, ease: [0.25, 0.46, 0.45, 0.94] }}
-      className={`flex items-end gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"}`}
+      initial={{ opacity: 0, y: 12, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0,  scale: 1    }}
+      transition={{ duration: 0.26, ease: [0.25, 0.46, 0.45, 0.94] }}
+      className={`flex items-end gap-2.5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
     >
       {/* Avatar */}
       {isUser ? (
@@ -43,29 +38,25 @@ export default function ChatMessage({ message }) {
       )}
 
       {/* Bubble + time */}
-      <div
-        className={`flex flex-col gap-1 max-w-[78%] ${isUser ? "items-end" : "items-start"}`}
-      >
+      <div className={`flex flex-col gap-1 max-w-[78%] ${isUser ? 'items-end' : 'items-start'}`}>
         <div
           className="relative px-4 py-2.5 text-[13px] leading-relaxed"
           style={
-            isUser
-              ? {
-                  background: "rgba(255,255,255,0.07)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  color: "rgba(255,255,255,0.85)",
-                  borderRadius: "18px 18px 4px 18px",
-                }
-              : {
-                  background: mode.bg,
-                  border: `1px solid ${mode.border}`,
-                  color: "rgba(255,255,255,0.82)",
-                  borderRadius: "18px 18px 18px 4px",
-                  boxShadow: `0 0 20px ${mode.color}08`,
-                }
+            isUser ? {
+              background:   'rgba(255,255,255,0.07)',
+              border:       '1px solid rgba(255,255,255,0.1)',
+              color:        'rgba(255,255,255,0.85)',
+              borderRadius: '18px 18px 4px 18px',
+            } : {
+              background:   mode.bg,
+              border:       `1px solid ${mode.border}`,
+              color:        'rgba(255,255,255,0.82)',
+              borderRadius: '18px 18px 18px 4px',
+              boxShadow:    `0 0 20px ${mode.color}08`,
+            }
           }
         >
-          {/* Left accent bar on AI messages */}
+          {/* Left accent on AI messages */}
           {!isUser && (
             <div
               className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
@@ -73,11 +64,11 @@ export default function ChatMessage({ message }) {
             />
           )}
 
-          {/* Content with streaming cursor */}
-          <span style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+          <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
             {content}
           </span>
 
+          {/* Streaming cursor */}
           {message.streaming && (
             <motion.span
               animate={{ opacity: [1, 0, 1] }}
@@ -88,9 +79,10 @@ export default function ChatMessage({ message }) {
           )}
         </div>
 
-        {/* Timestamp */}
-        {time && <span className="text-[9px] text-white/16 px-1">{time}</span>}
+        {time && (
+          <span className="text-[9px] text-white/16 px-1">{time}</span>
+        )}
       </div>
     </motion.div>
-  );
+  )
 }
