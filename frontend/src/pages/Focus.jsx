@@ -10,6 +10,8 @@ import CompletionScreen from "../components/focus/CompletionScreen.jsx";
 import FocusAnalytics from "../components/focus/FocusAnalytics.jsx";
 import SessionHistory from "../components/focus/SessionHistory.jsx";
 import FocusAchievements from "../components/focus/FocusAchievements.jsx";
+import { useToast } from "../components/ui/Toast.jsx";
+import { registerToastFn } from "../context/FocusContext.jsx";
 
 const TABS = [
   { id: "home", label: "Focus", icon: Timer },
@@ -21,13 +23,14 @@ const TABS = [
 function FocusShell() {
   const { phase } = useFocus();
   const [view, setView] = useState("home");
+  const { show } = useToast();
 
   const inSession = ["setup", "session", "break", "complete"].includes(phase);
 
   // Re-compute on phase change so analytics update after session ends
   const stats = useMemo(() => getFocusStats(), [phase]);
   const history = useMemo(() => getFocusHistory(), [phase]);
-
+  registerToastFn(show);
   return (
     <div className="min-h-full pb-10">
       {/* Tab nav */}

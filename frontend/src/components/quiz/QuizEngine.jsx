@@ -12,17 +12,20 @@ import {
   getPerformanceStats,
   checkAndUnlockAchievements,
 } from "../../utils/quizStorage.js";
+import { useToast } from "../../components/ui/Toast.jsx";
 
 const STREAK_BONUS = 25;
 
 export default function QuizEngine({ questions, config, onHome }) {
+  const { show: showToast } = useToast();
+
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answers, setAnswers] = useState([]);
   const [streak, setStreak] = useState(0);
   const [maxStreak, setMaxStreak] = useState(0);
   const [totalXP, setTotalXP] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
-  const [phase, setPhase] = useState("quiz"); // 'quiz' | 'result'
+  const [phase, setPhase] = useState("quiz");
   const [timedOut, setTimedOut] = useState(false);
   const [newAchievements, setNewAchievements] = useState([]);
   const [showPopup, setShowPopup] = useState(false);
@@ -48,6 +51,30 @@ export default function QuizEngine({ questions, config, onHome }) {
       setMaxStreak(newMaxStreak);
       setTotalXP((p) => p + finalXP);
       if (isCorrect) setCorrectCount(newCorrect);
+
+      // Toast: XP earned
+      if (isCorrect && finalXP > 0) {
+        showToast({
+          type: "xp",
+          title: `+${finalXP} XP`,
+          message:
+            newStreak >= 3 ? `${newStreak}x streak bonus!` : "Correct answer",
+          duration: 2000,
+        });
+      }
+
+      // Toast: streak milestone
+      if (
+        isCorrect &&
+        (newStreak === 3 || newStreak === 5 || newStreak === 10)
+      ) {
+        showToast({
+          type: "streak",
+          title: `${newStreak}-Answer Streak! 🔥`,
+          message: "Bonus XP included",
+          duration: 3000,
+        });
+      }
 
       const newAnswers = [
         ...answers,
@@ -83,13 +110,39 @@ export default function QuizEngine({ questions, config, onHome }) {
         if (newly.length > 0) {
           setNewAchievements(newly);
           setShowPopup(true);
+          newly.forEach((id) => {
+            showToast({
+              type: "achievement",
+              title: "Achievement Unlocked! 🏆",
+              message: id.replace(/_/g, " "),
+              duration: 4000,
+            });
+          });
         }
+
+        // Completion toast
+        showToast({
+          type: accuracy >= 75 ? "xp" : "info",
+          title: `Quiz Complete · ${accuracy}%`,
+          message: `+${sessionXP} XP earned`,
+          duration: 3500,
+        });
+
         setPhase("result");
       } else {
         setCurrentIdx((i) => i + 1);
       }
     },
-    [streak, maxStreak, answers, isLast, correctCount, totalXP, config],
+    [
+      streak,
+      maxStreak,
+      answers,
+      isLast,
+      correctCount,
+      totalXP,
+      config,
+      showToast,
+    ],
   );
 
   const result = {
@@ -106,7 +159,6 @@ export default function QuizEngine({ questions, config, onHome }) {
 
   return (
     <div className="max-w-2xl mx-auto">
-      {/* Achievement popup */}
       {showPopup && (
         <AchievementPopup
           achievementIds={newAchievements}
@@ -124,7 +176,6 @@ export default function QuizEngine({ questions, config, onHome }) {
             transition={{ duration: 0.22 }}
             className="space-y-5"
           >
-            {/* Top bar */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-lg">{cat?.emoji}</span>
