@@ -1,6 +1,3 @@
-// FILE PATH: frontend/src/components/dashboard/Sidebar.jsx
-// REPLACES existing Sidebar.jsx — uses real profile data.
-
 import { NavLink, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -14,19 +11,12 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
-  Flame,
   Brain,
+  Flame,
   Zap,
 } from "lucide-react";
-import {
-  getFirstName,
-  getDisplayName,
-  getTargetExam,
-  getUnifiedXP,
-  getUnifiedStreak,
-  getLevelFromXP,
-  getLevelProgress,
-} from "../../utils/userProfile.js";
+import { useGlobalStats } from "../../hooks/useGlobalStats.js";
+import { getProfile } from "../../utils/userProfile.js";
 
 const NAV_ITEMS = [
   {
@@ -72,7 +62,6 @@ const NAV_ITEMS = [
     description: "Deep Work",
   },
 ];
-
 const BOTTOM_ITEMS = [
   {
     path: "/settings",
@@ -89,21 +78,17 @@ export default function Sidebar({
   onClose,
   onToggleCollapse,
 }) {
-  const sidebarWidth = collapsed ? 72 : 240;
-
+  const w = collapsed ? 72 : 240;
   return (
     <>
-      {/* Mobile overlay */}
       {open && (
         <div
           className="fixed inset-0 z-20 bg-black/70 backdrop-blur-sm lg:hidden"
           onClick={onClose}
         />
       )}
-
-      {/* Desktop */}
       <motion.aside
-        animate={{ width: sidebarWidth }}
+        animate={{ width: w }}
         transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
         className="hidden lg:flex flex-col fixed left-0 top-0 h-full z-30 border-r border-white/[0.06] overflow-hidden"
         style={{
@@ -117,8 +102,6 @@ export default function Sidebar({
           isDesktop
         />
       </motion.aside>
-
-      {/* Mobile */}
       <AnimatePresence>
         {open && (
           <motion.aside
@@ -146,20 +129,22 @@ export default function Sidebar({
 
 function SidebarContent({ collapsed, onToggleCollapse, onClose, isDesktop }) {
   const location = useLocation();
+  const { stats } = useGlobalStats(); // live-updating global stats
+  const profile = getProfile();
 
-  // Live data
-  const { totalXP } = getUnifiedXP();
-  const streak = getUnifiedStreak();
-  const { level, pct } = getLevelProgress(totalXP);
-  const displayName = getDisplayName("Scholar");
-  const targetExam = getTargetExam();
+  const name = profile?.name?.trim() || "Scholar";
+  const exam = profile?.targetExam || "Exam";
   const initials =
-    displayName
+    name
       .split(" ")
       .map((n) => n[0])
       .join("")
       .slice(0, 2)
       .toUpperCase() || "SC";
+  const level = stats.level ?? 1;
+  const streak = stats.streak ?? 0;
+  const totalXP = stats.totalXP ?? 0;
+  const pct = stats.levelPct ?? 0;
 
   return (
     <div className="flex flex-col h-full select-none">
@@ -215,11 +200,11 @@ function SidebarContent({ collapsed, onToggleCollapse, onClose, isDesktop }) {
         )}
       </div>
 
-      {/* User card */}
+      {/* Profile card */}
       <AnimatePresence mode="wait">
         {!collapsed ? (
           <motion.div
-            key="profile-full"
+            key="pf"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -235,11 +220,9 @@ function SidebarContent({ collapsed, onToggleCollapse, onClose, isDesktop }) {
               </div>
               <div className="min-w-0">
                 <p className="text-[12px] font-semibold text-white truncate">
-                  {displayName}
+                  {name}
                 </p>
-                <p className="text-[10px] text-[#00FFC8]/70 truncate">
-                  {targetExam}
-                </p>
+                <p className="text-[10px] text-[#00FFC8]/70 truncate">{exam}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 mb-2.5">
@@ -258,21 +241,21 @@ function SidebarContent({ collapsed, onToggleCollapse, onClose, isDesktop }) {
             </div>
             <div>
               <div className="flex justify-between mb-1">
-                <span className="text-[9px] text-white/30 tracking-wider uppercase">
+                <span className="text-[9px] text-white/28 tracking-wider uppercase">
                   XP Progress
                 </span>
-                <span className="text-[9px] text-[#00FFC8]/60">
+                <span className="text-[9px] text-[#00FFC8]/55">
                   {totalXP.toLocaleString()}
                 </span>
               </div>
               <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
                 <motion.div
                   animate={{ width: `${pct}%` }}
-                  transition={{ duration: 1.2, ease: "easeOut" }}
+                  transition={{ duration: 1, ease: "easeOut" }}
                   className="h-full rounded-full"
                   style={{
                     background: "linear-gradient(90deg,#00FFC8,#7C6FFF)",
-                    boxShadow: "0 0 8px rgba(0,255,200,0.5)",
+                    boxShadow: "0 0 8px rgba(0,255,200,0.4)",
                   }}
                 />
               </div>
@@ -280,7 +263,7 @@ function SidebarContent({ collapsed, onToggleCollapse, onClose, isDesktop }) {
           </motion.div>
         ) : (
           <motion.div
-            key="profile-mini"
+            key="pf-mini"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -299,7 +282,7 @@ function SidebarContent({ collapsed, onToggleCollapse, onClose, isDesktop }) {
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5 scrollbar-none">
         {!collapsed && (
-          <p className="px-3 mb-2 text-[9px] tracking-[0.2em] text-white/20 uppercase">
+          <p className="px-3 mb-2 text-[9px] tracking-[0.2em] text-white/18 uppercase">
             Navigation
           </p>
         )}
@@ -328,7 +311,7 @@ function SidebarContent({ collapsed, onToggleCollapse, onClose, isDesktop }) {
         {isDesktop && (
           <button
             onClick={onToggleCollapse}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/[0.04] transition-all group"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-white/28 hover:text-white/55 hover:bg-white/[0.04] transition-all group"
           >
             <div className="shrink-0 w-5 h-5 flex items-center justify-center">
               {collapsed ? (
@@ -356,12 +339,11 @@ function SidebarContent({ collapsed, onToggleCollapse, onClose, isDesktop }) {
 function NavItem({ item, collapsed, index, location }) {
   const { path, icon: Icon, label, color, description } = item;
   const isActive = location.pathname === path;
-
   return (
     <motion.div
       initial={{ opacity: 0, x: -16 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.3, delay: index * 0.05 }}
+      transition={{ duration: 0.28, delay: index * 0.05 }}
     >
       <NavLink to={path}>
         {({ isActive }) => (
@@ -371,13 +353,13 @@ function NavItem({ item, collapsed, index, location }) {
           >
             {isActive && (
               <motion.div
-                layoutId="active-indicator"
+                layoutId="nav-active"
                 className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[60%] rounded-full"
                 style={{ background: color, boxShadow: `0 0 8px ${color}` }}
                 transition={{ duration: 0.2 }}
               />
             )}
-            <div className="relative shrink-0 w-5 h-5 flex items-center justify-center transition-all duration-200">
+            <div className="relative shrink-0 w-5 h-5 flex items-center justify-center">
               {isActive && (
                 <div
                   className="absolute inset-0 rounded-md blur-md opacity-40"
@@ -389,7 +371,7 @@ function NavItem({ item, collapsed, index, location }) {
                 style={{ color: isActive ? color : undefined }}
                 className={
                   !isActive
-                    ? "text-white/40 group-hover:text-white/70 transition-colors"
+                    ? "text-white/38 group-hover:text-white/68 transition-colors"
                     : ""
                 }
                 strokeWidth={isActive ? 2.5 : 2}
@@ -404,12 +386,12 @@ function NavItem({ item, collapsed, index, location }) {
                   transition={{ duration: 0.15 }}
                 >
                   <p
-                    className={`text-[12px] font-semibold tracking-wide leading-tight truncate ${isActive ? "text-white" : "text-white/50 group-hover:text-white/80"} transition-colors duration-200`}
+                    className={`text-[12px] font-semibold tracking-wide leading-tight truncate ${isActive ? "text-white" : "text-white/48 group-hover:text-white/78"} transition-colors`}
                   >
                     {label}
                   </p>
                   <p
-                    className={`text-[9px] tracking-wide truncate mt-0.5 ${isActive ? "opacity-60" : "opacity-0 group-hover:opacity-40"} transition-opacity duration-200`}
+                    className={`text-[9px] tracking-wide truncate mt-0.5 ${isActive ? "opacity-55" : "opacity-0 group-hover:opacity-38"} transition-opacity`}
                     style={{ color: isActive ? color : "#fff" }}
                   >
                     {description}

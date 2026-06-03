@@ -7,6 +7,7 @@ import {
   useEffect,
 } from "react";
 import { saveFocusSession } from "../utils/focusStorage.js";
+import { notifyStatsUpdate } from "../hooks/useGlobalStats.js";
 
 export const FOCUS_MODES = {
   pomodoro: {
@@ -46,14 +47,17 @@ export const FOCUS_MODES = {
 
 const FocusContext = createContext(null);
 
-// Toast caller — stored at module level so FocusContext can fire toasts
-// without a React hook dependency (avoids provider nesting issues)
-let _toastFn = null;
+// Module-level toast bridge — set once by Focus.jsx via registerToastFn
+let _toast = null;
 export function registerToastFn(fn) {
-  _toastFn = fn;
+  _toast = fn;
 }
 function fireToast(opts) {
-  if (_toastFn) _toastFn(opts);
+  try {
+    if (_toast) _toast(opts);
+  } catch {
+    /* ignore */
+  }
 }
 
 export function FocusProvider({ children }) {
@@ -85,6 +89,7 @@ export function FocusProvider({ children }) {
     pomRef.current = pomodoroCount;
   }, [pomodoroCount]);
 
+  // Tick
   useEffect(() => {
     if (!running) {
       clearInterval(tickRef.current);
@@ -96,6 +101,7 @@ export function FocusProvider({ children }) {
     return () => clearInterval(tickRef.current);
   }, [running]);
 
+  // Natural end detection
   useEffect(() => {
     if (secondsLeft === 0 && prevSecs.current > 0 && !firedRef.current) {
       firedRef.current = true;
@@ -107,6 +113,7 @@ export function FocusProvider({ children }) {
     prevSecs.current = secondsLeft;
   }, [secondsLeft]); // eslint-disable-line
 
+  // Keyboard
   useEffect(() => {
     const fn = (e) => {
       if (!["session", "break"].includes(phase)) return;
@@ -123,6 +130,11 @@ export function FocusProvider({ children }) {
     return () => window.removeEventListener("keydown", fn);
   }, [phase]);
 
+  const saveAndNotify = useCallback((sessionData) => {
+    saveFocusSession(sessionData);
+    notifyStatsUpdate(); // ping all global stat consumers
+  }, []);
+
   const handleTimerEnd = useCallback(() => {
     const cfg = configRef.current;
     if (!cfg) return;
@@ -133,13 +145,11 @@ export function FocusProvider({ children }) {
       const earned = Math.round(mins * modeData.xpPerMinute);
       const newXP = xpRef.current + earned;
       const newCount = pomRef.current + 1;
-
       setXpEarned(newXP);
       xpRef.current = newXP;
       setPomodoroCount(newCount);
       pomRef.current = newCount;
 
-      // Toast: XP
       fireToast({
         type: "xp",
         title: `+${earned} XP earned`,
@@ -148,7 +158,6 @@ export function FocusProvider({ children }) {
       });
 
       if (cfg.mode === "pomodoro") {
-        // Toast: break time
         fireToast({
           type: "info",
           title: "☕ Break Time!",
@@ -165,7 +174,7 @@ export function FocusProvider({ children }) {
         const dur = startRef.current
           ? Math.round((Date.now() - startRef.current) / 60000)
           : mins;
-        saveFocusSession({
+        saveAndNotify({
           mode: cfg.mode,
           durationMinutes: dur,
           subject: cfg.subject,
@@ -174,7 +183,6 @@ export function FocusProvider({ children }) {
           pomodoroCount: newCount,
           completed: true,
         });
-        // Toast: session complete
         fireToast({
           type: "mission",
           title: "Session Complete! 🎯",
@@ -197,7 +205,7 @@ export function FocusProvider({ children }) {
       setTotalSeconds(wSecs);
       setTimeout(() => setRunning(true), 100);
     }
-  }, [phase]);
+  }, [phase, saveAndNotify]);
 
   const startSession = useCallback((cfg) => {
     const modeData = FOCUS_MODES[cfg.mode] ?? FOCUS_MODES.pomodoro;
@@ -219,7 +227,7 @@ export function FocusProvider({ children }) {
     fireToast({
       type: "info",
       title: `${modeData.emoji} ${modeData.label} started`,
-      message: `${cfg.workMinutes}m session${cfg.subject ? ` · ${cfg.subject}` : ""}`,
+      message: `${cfg.workMinutes}m${cfg.subject ? ` · ${cfg.subject}` : ""}`,
       duration: 2000,
     });
   }, []);
@@ -258,7 +266,7 @@ export function FocusProvider({ children }) {
         Math.min(elapsed, cfg.workMinutes) * modeData.xpPerMinute * 0.5,
       );
     setXpEarned(finalXP);
-    saveFocusSession({
+    saveAndNotify({
       mode: cfg.mode,
       durationMinutes: elapsed,
       subject: cfg.subject,
@@ -274,7 +282,7 @@ export function FocusProvider({ children }) {
       duration: 3000,
     });
     setPhase("complete");
-  }, []);
+  }, [saveAndNotify]);
 
   const exitToHome = useCallback(() => {
     clearInterval(tickRef.current);

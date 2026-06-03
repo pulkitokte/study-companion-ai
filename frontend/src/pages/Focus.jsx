@@ -1,7 +1,12 @@
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Timer, BarChart3, Clock, Trophy } from "lucide-react";
-import { FocusProvider, useFocus } from "../context/FocusContext.jsx";
+import {
+  FocusProvider,
+  useFocus,
+  registerToastFn,
+} from "../context/FocusContext.jsx";
+import { useToast } from "../components/ui/Toast.jsx";
 import { getFocusHistory, getFocusStats } from "../utils/focusStorage.js";
 import FocusHome from "../components/focus/FocusHome.jsx";
 import SessionSetup from "../components/focus/SessionSetup.jsx";
@@ -10,8 +15,6 @@ import CompletionScreen from "../components/focus/CompletionScreen.jsx";
 import FocusAnalytics from "../components/focus/FocusAnalytics.jsx";
 import SessionHistory from "../components/focus/SessionHistory.jsx";
 import FocusAchievements from "../components/focus/FocusAchievements.jsx";
-import { useToast } from "../components/ui/Toast.jsx";
-import { registerToastFn } from "../context/FocusContext.jsx";
 
 const TABS = [
   { id: "home", label: "Focus", icon: Timer },
@@ -23,17 +26,17 @@ const TABS = [
 function FocusShell() {
   const { phase } = useFocus();
   const [view, setView] = useState("home");
+
+  // Wire toast bridge — runs on every render but is a no-op if already set
   const { show } = useToast();
+  registerToastFn(show);
 
   const inSession = ["setup", "session", "break", "complete"].includes(phase);
-
-  // Re-compute on phase change so analytics update after session ends
   const stats = useMemo(() => getFocusStats(), [phase]);
   const history = useMemo(() => getFocusHistory(), [phase]);
-  registerToastFn(show);
+
   return (
     <div className="min-h-full pb-10">
-      {/* Tab nav */}
       <AnimatePresence>
         {!inSession && (
           <motion.div
@@ -70,7 +73,6 @@ function FocusShell() {
         )}
       </AnimatePresence>
 
-      {/* Content */}
       <AnimatePresence mode="wait">
         {phase === "setup" && (
           <motion.div
@@ -83,7 +85,6 @@ function FocusShell() {
             <SessionSetup />
           </motion.div>
         )}
-
         {(phase === "session" || phase === "break") && (
           <motion.div
             key="timer"
@@ -95,7 +96,6 @@ function FocusShell() {
             <FocusTimer />
           </motion.div>
         )}
-
         {phase === "complete" && (
           <motion.div
             key="complete"
@@ -107,7 +107,6 @@ function FocusShell() {
             <CompletionScreen />
           </motion.div>
         )}
-
         {!inSession && view === "home" && (
           <motion.div
             key="v-home"
@@ -119,7 +118,6 @@ function FocusShell() {
             <FocusHome onAnalyticsClick={() => setView("analytics")} />
           </motion.div>
         )}
-
         {!inSession && view === "analytics" && (
           <motion.div
             key="v-analytics"
@@ -131,7 +129,6 @@ function FocusShell() {
             <FocusAnalytics onBack={() => setView("home")} />
           </motion.div>
         )}
-
         {!inSession && view === "history" && (
           <motion.div
             key="v-history"
@@ -158,10 +155,9 @@ function FocusShell() {
             </div>
           </motion.div>
         )}
-
         {!inSession && view === "achievements" && (
           <motion.div
-            key="v-achievements"
+            key="v-ach"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

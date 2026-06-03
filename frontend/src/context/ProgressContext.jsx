@@ -5,41 +5,29 @@ import {
   useCallback,
   useMemo,
 } from "react";
+import { aggregateAll } from "../utils/globalStats.js";
+import { notifyStatsUpdate } from "../hooks/useGlobalStats.js";
 import {
-  getGlobalStats,
   getTodayMissions,
   checkMissionsAutoComplete,
 } from "../utils/progressStorage.js";
-import { getQuizHistory } from "../utils/quizStorage.js";
-import { getFocusHistory } from "../utils/focusStorage.js";
 
 const ProgressContext = createContext(null);
-
-function calcTodayXP() {
-  const today = new Date().toISOString().slice(0, 10);
-  const qXP = (getQuizHistory() ?? [])
-    .filter((q) => q.date?.slice(0, 10) === today)
-    .reduce((s, q) => s + (q.totalXP ?? 0), 0);
-  const fXP = (getFocusHistory() ?? [])
-    .filter((f) => f.date?.slice(0, 10) === today)
-    .reduce((s, f) => s + (f.xpEarned ?? 0), 0);
-  return qXP + fXP;
-}
 
 export function ProgressProvider({ children }) {
   const [rev, setRev] = useState(0);
 
-  const stats = useMemo(() => getGlobalStats(), [rev]);
+  const stats = useMemo(() => aggregateAll(), [rev]);
   const rawMiss = useMemo(() => getTodayMissions(), [rev]);
   const missions = useMemo(() => checkMissionsAutoComplete(rawMiss), [rev]);
-  const xpToday = useMemo(() => calcTodayXP(), [rev]);
 
-  const refreshStats = useCallback(() => setRev((r) => r + 1), []);
+  const refreshStats = useCallback(() => {
+    setRev((r) => r + 1);
+    notifyStatsUpdate(); // propagate to all useGlobalStats consumers
+  }, []);
 
   return (
-    <ProgressContext.Provider
-      value={{ stats, missions, xpToday, refreshStats }}
-    >
+    <ProgressContext.Provider value={{ stats, missions, refreshStats }}>
       {children}
     </ProgressContext.Provider>
   );
