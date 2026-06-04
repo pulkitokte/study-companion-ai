@@ -1,16 +1,51 @@
-# React + Vite
+<div align="center">
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+# 🧠 StudyMind AI
 
-Currently, two official plugins are available:
+### The AI-Powered Study OS for Competitive Exam Aspirants
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+[![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react)](https://react.dev)
+[![Vite](https://img.shields.io/badge/Vite-5-FFB347?style=flat-square&logo=vite)](https://vitejs.dev)
+[![Gemini](https://img.shields.io/badge/Gemini-AI-00FFC8?style=flat-square&logo=google)](https://ai.google.dev)
+[![Framer Motion](https://img.shields.io/badge/Framer-Motion-FF6B9D?style=flat-square)](https://www.framer.com/motion)
+[![License](https://img.shields.io/badge/License-MIT-7C6FFF?style=flat-square)](LICENSE)
 
-## React Compiler
+**A full-stack AI study companion built with React, powered by Google Gemini, and engineered as a zero-backend performance OS for UPSC, SSC, Banking, and competitive exam preparation.**
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+[🚀 Live Demo](https://your-demo.vercel.app) · [📸 Screenshots](#screenshots) · [⚙️ Setup](#setup) · [🗺️ Roadmap](#roadmap)
 
-## Expanding the ESLint configuration
+</div>
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+---
+
+## ✨ What is StudyMind?
+
+StudyMind is a **production-grade AI study platform** built entirely in React — no backend, no database, no compromise. It combines:
+
+- 🤖 **Real Gemini AI** with 5 personality modes and streaming responses
+- 🎮 **Gamified XP system** spanning Quiz, Focus, and Planner activities  
+- ⏱️ **Pomodoro Focus Engine** with ambient cyberpunk interface
+- ⚔️ **Adaptive Quiz Arena** with 8 UPSC subjects and performance analytics
+- 📅 **Smart Study Planner** with calendar heatmap and task management
+- 📊 **Unified Progress OS** with rank system, achievements, and daily missions
+- 🧠 **Personalized AI** that knows your profile, streak, weak subjects, and goals
+
+Everything persists in `localStorage` — **zero server required.**
+
+---
+
+## 📸 Screenshots
+
+> _Add screenshots here after deployment_
+
+| Dashboard | Quiz Arena | Focus Mode |
+|-----------|-----------|------------|
+| ![Dashboard](screenshots/dashboard.png) | ![Quiz](screenshots/quiz.png) | ![Focus](screenshots/focus.png) |
+
+| AI Chat | Progress | Showcase |
+|---------|----------|---------|
+| ![Chat](screenshots/chat.png) | ![Progress](screenshots/progress.png) | ![Showcase](screenshots/showcase.png) |
+
+---
+
+## 🏗️ System Architecture
