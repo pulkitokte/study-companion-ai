@@ -10,7 +10,6 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  X,
   Brain,
   Flame,
   Zap,
@@ -18,118 +17,77 @@ import {
 import { useGlobalStats } from "../../hooks/useGlobalStats.js";
 import { getProfile } from "../../utils/userProfile.js";
 
-const NAV_ITEMS = [
+const NAV = [
   {
     path: "/dashboard",
     icon: LayoutDashboard,
     label: "Dashboard",
     color: "#00FFC8",
-    description: "Mission Control",
+    desc: "Mission Control",
   },
   {
     path: "/planner",
     icon: CalendarDays,
     label: "Planner",
     color: "#7C6FFF",
-    description: "Study Schedule",
+    desc: "Study Schedule",
   },
   {
     path: "/chat",
     icon: MessageSquareHeart,
-    label: "Chat Companion",
+    label: "Chat",
     color: "#FF6B9D",
-    description: "AI Study Partner",
+    desc: "AI Study Partner",
   },
   {
     path: "/quiz",
     icon: Swords,
     label: "Quiz Arena",
     color: "#FFB347",
-    description: "Test Yourself",
+    desc: "Test Yourself",
   },
   {
     path: "/progress",
     icon: BarChart3,
     label: "Progress",
     color: "#4FC3F7",
-    description: "Track Growth",
+    desc: "Track Growth",
   },
   {
     path: "/focus",
     icon: Timer,
     label: "Focus Mode",
     color: "#B5FF47",
-    description: "Deep Work",
+    desc: "Deep Work",
   },
-];
-const BOTTOM_ITEMS = [
   {
     path: "/settings",
     icon: Settings,
     label: "Settings",
     color: "#888",
-    description: "Preferences",
+    desc: "Preferences",
   },
 ];
 
-export default function Sidebar({
-  open,
-  collapsed,
-  onClose,
-  onToggleCollapse,
-}) {
+// Desktop-only sidebar (mobile uses BottomTabs + MobileNav)
+export default function Sidebar({ collapsed, onToggleCollapse }) {
   const w = collapsed ? 72 : 240;
+
   return (
-    <>
-      {open && (
-        <div
-          className="fixed inset-0 z-20 bg-black/70 backdrop-blur-sm lg:hidden"
-          onClick={onClose}
-        />
-      )}
-      <motion.aside
-        animate={{ width: w }}
-        transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-        className="hidden lg:flex flex-col fixed left-0 top-0 h-full z-30 border-r border-white/[0.06] overflow-hidden"
-        style={{
-          background: "linear-gradient(180deg,#0A0A14 0%,#06060F 100%)",
-        }}
-      >
-        <SidebarContent
-          collapsed={collapsed}
-          onToggleCollapse={onToggleCollapse}
-          onClose={onClose}
-          isDesktop
-        />
-      </motion.aside>
-      <AnimatePresence>
-        {open && (
-          <motion.aside
-            initial={{ x: -280 }}
-            animate={{ x: 0 }}
-            exit={{ x: -280 }}
-            transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-            className="flex lg:hidden flex-col fixed left-0 top-0 h-full z-30 w-[240px] border-r border-white/[0.06] overflow-hidden"
-            style={{
-              background: "linear-gradient(180deg,#0A0A14 0%,#06060F 100%)",
-            }}
-          >
-            <SidebarContent
-              collapsed={false}
-              onToggleCollapse={onToggleCollapse}
-              onClose={onClose}
-              isDesktop={false}
-            />
-          </motion.aside>
-        )}
-      </AnimatePresence>
-    </>
+    <motion.aside
+      animate={{ width: w }}
+      transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+      className="hidden lg:flex flex-col fixed left-0 top-0 h-full z-30 border-r border-white/[0.06] overflow-hidden"
+      style={{ background: "linear-gradient(180deg,#0A0A14 0%,#06060F 100%)" }}
+    >
+      <SidebarInner collapsed={collapsed} onToggleCollapse={onToggleCollapse} />
+    </motion.aside>
   );
 }
 
-function SidebarContent({ collapsed, onToggleCollapse, onClose, isDesktop }) {
+function SidebarInner({ collapsed, onToggleCollapse }) {
   const location = useLocation();
-  const { stats } = useGlobalStats(); // live-updating global stats
+  const { stats } = useGlobalStats();
   const profile = getProfile();
 
   const name = profile?.name?.trim() || "Scholar";
@@ -157,11 +115,11 @@ function SidebarContent({ collapsed, onToggleCollapse, onClose, isDesktop }) {
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -10 }}
-              transition={{ duration: 0.2 }}
+              transition={{ duration: 0.18 }}
               className="flex items-center gap-2.5"
             >
               <div className="relative w-8 h-8 shrink-0">
-                <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-[#00FFC8] to-[#7C6FFF] opacity-20 blur-md" />
+                <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-[#00FFC8] to-[#7C6FFF] opacity-18 blur-md" />
                 <div className="relative w-8 h-8 rounded-lg bg-gradient-to-br from-[#00FFC8] to-[#7C6FFF] flex items-center justify-center">
                   <Brain size={16} className="text-black" strokeWidth={2.5} />
                 </div>
@@ -170,7 +128,7 @@ function SidebarContent({ collapsed, onToggleCollapse, onClose, isDesktop }) {
                 <p className="text-[13px] font-bold tracking-widest text-white uppercase">
                   StudyMind
                 </p>
-                <p className="text-[9px] tracking-[0.2em] text-[#00FFC8]/60 uppercase">
+                <p className="text-[9px] tracking-[0.2em] text-[#00FFC8]/55 uppercase">
                   AI Companion
                 </p>
               </div>
@@ -183,21 +141,13 @@ function SidebarContent({ collapsed, onToggleCollapse, onClose, isDesktop }) {
               exit={{ opacity: 0 }}
               className="relative w-8 h-8 mx-auto"
             >
-              <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-[#00FFC8] to-[#7C6FFF] opacity-20 blur-md" />
+              <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-[#00FFC8] to-[#7C6FFF] opacity-18 blur-md" />
               <div className="relative w-8 h-8 rounded-lg bg-gradient-to-br from-[#00FFC8] to-[#7C6FFF] flex items-center justify-center">
                 <Brain size={16} className="text-black" strokeWidth={2.5} />
               </div>
             </motion.div>
           )}
         </AnimatePresence>
-        {!isDesktop && (
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-md text-white/40 hover:text-white/80 hover:bg-white/5 transition-colors"
-          >
-            <X size={16} />
-          </button>
-        )}
       </div>
 
       {/* Profile card */}
@@ -208,7 +158,7 @@ function SidebarContent({ collapsed, onToggleCollapse, onClose, isDesktop }) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.18 }}
             className="px-3 py-4 border-b border-white/[0.05] shrink-0"
           >
             <div className="flex items-center gap-3 mb-3">
@@ -222,7 +172,7 @@ function SidebarContent({ collapsed, onToggleCollapse, onClose, isDesktop }) {
                 <p className="text-[12px] font-semibold text-white truncate">
                   {name}
                 </p>
-                <p className="text-[10px] text-[#00FFC8]/70 truncate">{exam}</p>
+                <p className="text-[10px] text-[#00FFC8]/65 truncate">{exam}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 mb-2.5">
@@ -241,17 +191,17 @@ function SidebarContent({ collapsed, onToggleCollapse, onClose, isDesktop }) {
             </div>
             <div>
               <div className="flex justify-between mb-1">
-                <span className="text-[9px] text-white/28 tracking-wider uppercase">
-                  XP Progress
+                <span className="text-[9px] text-white/25 tracking-wider uppercase">
+                  XP
                 </span>
-                <span className="text-[9px] text-[#00FFC8]/55">
+                <span className="text-[9px] text-[#00FFC8]/50">
                   {totalXP.toLocaleString()}
                 </span>
               </div>
               <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
                 <motion.div
                   animate={{ width: `${pct}%` }}
-                  transition={{ duration: 1, ease: "easeOut" }}
+                  transition={{ duration: 1.2, ease: "easeOut" }}
                   className="h-full rounded-full"
                   style={{
                     background: "linear-gradient(90deg,#00FFC8,#7C6FFF)",
@@ -286,128 +236,111 @@ function SidebarContent({ collapsed, onToggleCollapse, onClose, isDesktop }) {
             Navigation
           </p>
         )}
-        {NAV_ITEMS.map((item, i) => (
-          <NavItem
-            key={item.path}
-            item={item}
-            collapsed={collapsed}
-            index={i}
-            location={location}
-          />
-        ))}
+        {NAV.map((item, i) => {
+          const Icon = item.icon;
+          const isActive = location.pathname === item.path;
+          return (
+            <motion.div
+              key={item.path}
+              initial={{ opacity: 0, x: -14 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.26, delay: i * 0.04 }}
+            >
+              <NavLink
+                to={item.path}
+                title={collapsed ? item.label : undefined}
+              >
+                {({ isActive }) => (
+                  <div
+                    className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group cursor-pointer ${isActive ? "bg-white/[0.07]" : "hover:bg-white/[0.04]"}`}
+                  >
+                    {isActive && (
+                      <motion.div
+                        layoutId="sidebar-active"
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[60%] rounded-full"
+                        style={{
+                          background: item.color,
+                          boxShadow: `0 0 8px ${item.color}`,
+                        }}
+                        transition={{ duration: 0.2 }}
+                      />
+                    )}
+                    <div className="relative shrink-0 w-5 h-5 flex items-center justify-center">
+                      {isActive && (
+                        <div
+                          className="absolute inset-0 rounded-md blur-sm opacity-40"
+                          style={{ background: item.color }}
+                        />
+                      )}
+                      <Icon
+                        size={16}
+                        style={{ color: isActive ? item.color : undefined }}
+                        className={
+                          !isActive
+                            ? "text-white/38 group-hover:text-white/65 transition-colors"
+                            : ""
+                        }
+                        strokeWidth={isActive ? 2.5 : 2}
+                      />
+                    </div>
+                    {!collapsed && (
+                      <div className="min-w-0">
+                        <p
+                          className={`text-[12px] font-semibold leading-tight truncate ${isActive ? "text-white" : "text-white/48 group-hover:text-white/75"} transition-colors`}
+                        >
+                          {item.label}
+                        </p>
+                        {isActive && (
+                          <p
+                            className="text-[9px] truncate mt-0.5 opacity-55"
+                            style={{ color: item.color }}
+                          >
+                            {item.desc}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {isActive && collapsed && (
+                      <div
+                        className="absolute right-1.5 top-1.5 w-1.5 h-1.5 rounded-full"
+                        style={{
+                          background: item.color,
+                          boxShadow: `0 0 6px ${item.color}`,
+                        }}
+                      />
+                    )}
+                  </div>
+                )}
+              </NavLink>
+            </motion.div>
+          );
+        })}
       </nav>
 
-      {/* Bottom */}
-      <div className="px-2 py-3 border-t border-white/[0.05] space-y-0.5 shrink-0">
-        {BOTTOM_ITEMS.map((item, i) => (
-          <NavItem
-            key={item.path}
-            item={item}
-            collapsed={collapsed}
-            index={i}
-            location={location}
-          />
-        ))}
-        {isDesktop && (
-          <button
-            onClick={onToggleCollapse}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-white/28 hover:text-white/55 hover:bg-white/[0.04] transition-all group"
-          >
-            <div className="shrink-0 w-5 h-5 flex items-center justify-center">
-              {collapsed ? (
-                <ChevronRight
-                  size={14}
-                  className="group-hover:translate-x-0.5 transition-transform"
-                />
-              ) : (
-                <ChevronLeft
-                  size={14}
-                  className="group-hover:-translate-x-0.5 transition-transform"
-                />
-              )}
-            </div>
-            {!collapsed && (
-              <span className="text-[11px] tracking-wide">Collapse</span>
-            )}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function NavItem({ item, collapsed, index, location }) {
-  const { path, icon: Icon, label, color, description } = item;
-  const isActive = location.pathname === path;
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: -16 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.28, delay: index * 0.05 }}
-    >
-      <NavLink to={path}>
-        {({ isActive }) => (
-          <div
-            className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group cursor-pointer ${isActive ? "bg-white/[0.07]" : "hover:bg-white/[0.04]"}`}
-            title={collapsed ? label : undefined}
-          >
-            {isActive && (
-              <motion.div
-                layoutId="nav-active"
-                className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[60%] rounded-full"
-                style={{ background: color, boxShadow: `0 0 8px ${color}` }}
-                transition={{ duration: 0.2 }}
+      {/* Collapse toggle */}
+      <div className="px-2 py-3 border-t border-white/[0.05] shrink-0">
+        <button
+          onClick={onToggleCollapse}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-white/28 hover:text-white/55 hover:bg-white/[0.04] transition-all group"
+        >
+          <div className="shrink-0 w-5 h-5 flex items-center justify-center">
+            {collapsed ? (
+              <ChevronRight
+                size={14}
+                className="group-hover:translate-x-0.5 transition-transform"
               />
-            )}
-            <div className="relative shrink-0 w-5 h-5 flex items-center justify-center">
-              {isActive && (
-                <div
-                  className="absolute inset-0 rounded-md blur-md opacity-40"
-                  style={{ background: color }}
-                />
-              )}
-              <Icon
-                size={16}
-                style={{ color: isActive ? color : undefined }}
-                className={
-                  !isActive
-                    ? "text-white/38 group-hover:text-white/68 transition-colors"
-                    : ""
-                }
-                strokeWidth={isActive ? 2.5 : 2}
-              />
-            </div>
-            {!collapsed && (
-              <AnimatePresence mode="wait">
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                >
-                  <p
-                    className={`text-[12px] font-semibold tracking-wide leading-tight truncate ${isActive ? "text-white" : "text-white/48 group-hover:text-white/78"} transition-colors`}
-                  >
-                    {label}
-                  </p>
-                  <p
-                    className={`text-[9px] tracking-wide truncate mt-0.5 ${isActive ? "opacity-55" : "opacity-0 group-hover:opacity-38"} transition-opacity`}
-                    style={{ color: isActive ? color : "#fff" }}
-                  >
-                    {description}
-                  </p>
-                </motion.div>
-              </AnimatePresence>
-            )}
-            {isActive && collapsed && (
-              <div
-                className="absolute right-1.5 top-1.5 w-1.5 h-1.5 rounded-full"
-                style={{ background: color, boxShadow: `0 0 6px ${color}` }}
+            ) : (
+              <ChevronLeft
+                size={14}
+                className="group-hover:-translate-x-0.5 transition-transform"
               />
             )}
           </div>
-        )}
-      </NavLink>
-    </motion.div>
+          {!collapsed && (
+            <span className="text-[11px] tracking-wide">Collapse</span>
+          )}
+        </button>
+      </div>
+    </div>
   );
 }

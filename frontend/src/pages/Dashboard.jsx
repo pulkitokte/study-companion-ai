@@ -19,19 +19,28 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { useGlobalStats } from "../hooks/useGlobalStats.js";
+import { isMobile } from "../utils/mobileOptimizations.js";
+import MobileDashboard from "../components/mobile/MobileDashboard.jsx";
+import SystemStatus from "../components/ui/SystemStatus.jsx";
+import LiveActivityFeed from "../components/dashboard/LiveActivityFeed.jsx";
+import SmartRecommendations from "../components/dashboard/SmartRecommendations.jsx";
 import {
-  getProfile,
-  getWeakSubjects,
   getFirstName,
   getSmartRecommendations,
+  getWeakSubjects,
 } from "../utils/userProfile.js";
 import { getQuizHistory } from "../utils/quizStorage.js";
 import {
   getTodayMissions,
   checkMissionsAutoComplete,
 } from "../utils/progressStorage.js";
-import SystemStatus from "../components/ui/SystemStatus.jsx";
-import LiveActivityFeed from "../components/dashboard/LiveActivityFeed.jsx";
+import { CATEGORIES } from "../data/mockQuizData.js";
+
+// Return mobile layout on small screens
+function DashboardContent() {
+  if (isMobile()) return <MobileDashboard />;
+  return <DesktopDashboard />;
+}
 
 const C = { hidden: {}, visible: { transition: { staggerChildren: 0.07 } } };
 const I = {
@@ -46,7 +55,7 @@ const I = {
 const QUICK_ACTIONS = [
   { label: "Start Quiz", icon: Swords, color: "#FFB347", path: "/quiz" },
   {
-    label: "Ask Companion",
+    label: "Ask AI",
     icon: MessageSquareHeart,
     color: "#FF6B9D",
     path: "/chat",
@@ -60,15 +69,12 @@ const QUICK_ACTIONS = [
   },
 ];
 
-export default function Dashboard() {
+function DesktopDashboard() {
   const navigate = useNavigate();
-  const { stats } = useGlobalStats(); // live global stats
-
+  const { stats } = useGlobalStats();
   const firstName = getFirstName("Scholar");
-  const weakSubs = getWeakSubjects();
   const recs = useMemo(() => getSmartRecommendations(), []);
 
-  // Missions
   const rawMissions = useMemo(() => getTodayMissions(), []);
   const missions = useMemo(
     () => checkMissionsAutoComplete(rawMissions),
@@ -80,7 +86,6 @@ export default function Dashboard() {
       ? Math.round((doneMissions / missions.length) * 100)
       : 0;
 
-  // Weak subjects from quiz history
   const weakFromQuiz = useMemo(() => {
     const qH = getQuizHistory() ?? [];
     const map = {};
@@ -94,6 +99,7 @@ export default function Dashboard() {
       .map(([cat, v]) => ({
         subject: cat,
         accuracy: Math.round(v.total / v.count),
+        catObj: CATEGORIES.find((c) => c.id === cat),
       }))
       .sort((a, b) => a.accuracy - b.accuracy)
       .slice(0, 3);
@@ -182,7 +188,7 @@ export default function Dashboard() {
               </span>{" "}
               ⚡
             </h2>
-            <p className="text-[13px] text-white/38 max-w-[400px] leading-relaxed">
+            <p className="text-[13px] text-white/38 max-w-[420px] leading-relaxed">
               {stats.streak > 0 && (
                 <span className="text-[#FF6B2B] font-semibold">
                   {stats.streak}-day streak.{" "}
@@ -194,8 +200,8 @@ export default function Dashboard() {
                 </span>
               )}
               {doneMissions > 0
-                ? `${doneMissions}/${missions.length} missions done today.`
-                : "Start your first mission today."}
+                ? `${doneMissions}/${missions.length} missions done.`
+                : "Begin today's sessions."}
             </p>
           </div>
 
@@ -216,7 +222,7 @@ export default function Dashboard() {
                   cy="28"
                   r="22"
                   fill="none"
-                  stroke="url(#dashGrad)"
+                  stroke="url(#dashGrad2)"
                   strokeWidth="4"
                   strokeLinecap="round"
                   strokeDasharray={`${2 * Math.PI * 22}`}
@@ -224,24 +230,24 @@ export default function Dashboard() {
                   animate={{
                     strokeDashoffset: 2 * Math.PI * 22 * (1 - missionPct / 100),
                   }}
-                  transition={{ duration: 1.5, delay: 0.3, ease: "easeOut" }}
+                  transition={{ duration: 1.5, delay: 0.4, ease: "easeOut" }}
                 />
                 <defs>
-                  <linearGradient id="dashGrad" x1="0" y1="0" x2="1" y2="0">
+                  <linearGradient id="dashGrad2" x1="0" y1="0" x2="1" y2="0">
                     <stop offset="0%" stopColor="#00FFC8" />
                     <stop offset="100%" stopColor="#7C6FFF" />
                   </linearGradient>
                 </defs>
               </svg>
               <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-[13px] font-bold text-white">
+                <span className="text-[14px] font-bold text-white">
                   {missionPct}%
                 </span>
               </div>
             </div>
             <div>
-              <p className="text-[11px] text-white/28 uppercase tracking-wider mb-0.5">
-                Today
+              <p className="text-[10px] text-white/25 uppercase tracking-wider mb-0.5">
+                Missions
               </p>
               <p className="text-[22px] font-bold text-white leading-none">
                 {doneMissions}
@@ -250,7 +256,7 @@ export default function Dashboard() {
                 </span>
               </p>
               <p className="text-[10px] text-[#00FFC8]/55 mt-0.5">
-                +{stats.todayXP ?? 0} XP
+                +{stats.todayXP ?? 0} XP today
               </p>
             </div>
           </div>
@@ -269,20 +275,18 @@ export default function Dashboard() {
               key={s.label}
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.32, delay: i * 0.07 }}
-              className="relative overflow-hidden rounded-xl border border-white/[0.06] p-4 group hover:border-white/10 transition-colors"
+              transition={{ duration: 0.3, delay: i * 0.07 }}
+              className="relative overflow-hidden rounded-xl border border-white/[0.06] p-4 group hover:border-white/[0.1] transition-all"
               style={{ background: s.bg }}
             >
-              <div className="flex items-start justify-between mb-3">
-                <div
-                  className="p-2 rounded-lg"
-                  style={{ background: `${s.color}15` }}
-                >
-                  <Icon size={14} style={{ color: s.color }} />
-                </div>
+              <div
+                className="p-2 rounded-lg w-fit mb-3"
+                style={{ background: `${s.color}15` }}
+              >
+                <Icon size={14} style={{ color: s.color }} />
               </div>
               <div className="flex items-end gap-1">
-                <span className="text-2xl font-bold text-white leading-none">
+                <span className="text-[24px] font-bold text-white leading-none">
                   {s.value}
                 </span>
                 <span className="text-[10px] text-white/28 mb-0.5">
@@ -304,77 +308,39 @@ export default function Dashboard() {
       </motion.div>
 
       {/* Smart recommendations */}
-      {recs.length > 0 && (
-        <motion.div variants={I} className="space-y-2">
-          {recs.map((rec, i) => {
-            const urgencyColor =
-              rec.urgency === "high"
-                ? "#FF3C3C"
-                : rec.urgency === "positive"
-                  ? "#00FFC8"
-                  : "#FFB347";
-            return (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.07 }}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer hover:bg-white/[0.02] transition-all"
-                style={{
-                  borderColor: `${urgencyColor}22`,
-                  background: `${urgencyColor}05`,
-                }}
-                onClick={() => navigate(`/${rec.action}`)}
-              >
-                <AlertTriangle
-                  size={12}
-                  style={{ color: urgencyColor }}
-                  className="shrink-0"
-                />
-                <p className="text-[12px] text-white/62 flex-1">{rec.text}</p>
-                <ArrowRight
-                  size={12}
-                  style={{ color: urgencyColor }}
-                  className="shrink-0"
-                />
-              </motion.div>
-            );
-          })}
-        </motion.div>
-      )}
+      <motion.div variants={I}>
+        <SmartRecommendations />
+      </motion.div>
 
       {/* Main grid */}
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-6">
-        {/* Left column */}
         <div className="space-y-5">
-          {/* Daily Missions */}
+          {/* Daily missions */}
           <motion.div
             variants={I}
             className="rounded-2xl border border-white/[0.06] overflow-hidden"
             style={{ background: "#0A0A14" }}
           >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.05]">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-[#FFB347]/10">
-                  <Star size={14} className="text-[#FFB347]" />
-                </div>
-                <div>
-                  <h3 className="text-[13px] font-bold text-white">
-                    Daily Missions
-                  </h3>
-                  <p className="text-[10px] text-white/28">
-                    Auto-tracked from your activity
-                  </p>
-                </div>
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-white/[0.05]">
+              <div className="p-2 rounded-lg bg-[#FFB347]/10">
+                <Star size={14} className="text-[#FFB347]" />
               </div>
-              <div className="flex items-center gap-2">
+              <div>
+                <h3 className="text-[13px] font-bold text-white">
+                  Daily Missions
+                </h3>
+                <p className="text-[10px] text-white/28">
+                  Auto-detected from activity
+                </p>
+              </div>
+              <div className="ml-auto flex items-center gap-2">
                 <span className="text-[11px] text-white/28">
                   {doneMissions}/{missions.length}
                 </span>
-                <div className="w-20 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                <div className="w-16 h-1.5 bg-white/5 rounded-full overflow-hidden">
                   <motion.div
                     animate={{ width: `${missionPct}%` }}
-                    transition={{ duration: 1, delay: 0.4 }}
+                    transition={{ duration: 1 }}
                     className="h-full rounded-full"
                     style={{
                       background: "linear-gradient(90deg,#00FFC8,#7C6FFF)",
@@ -390,7 +356,7 @@ export default function Dashboard() {
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.25, delay: 0.1 + i * 0.06 }}
-                  className={`flex items-center gap-4 px-5 py-4 ${m.done ? "opacity-55" : "hover:bg-white/[0.02]"} transition-colors`}
+                  className={`flex items-center gap-4 px-5 py-3.5 ${m.done ? "opacity-55" : "hover:bg-white/[0.02]"} transition-colors`}
                 >
                   <div className="shrink-0">
                     {m.done ? (
@@ -400,7 +366,7 @@ export default function Dashboard() {
                     )}
                   </div>
                   <p
-                    className={`flex-1 text-[13px] font-medium leading-snug ${m.done ? "line-through text-white/38" : "text-white/78"}`}
+                    className={`flex-1 text-[13px] font-medium ${m.done ? "line-through text-white/35" : "text-white/78"}`}
                   >
                     {m.label}
                   </p>
@@ -415,13 +381,13 @@ export default function Dashboard() {
             </div>
           </motion.div>
 
-          {/* Live Activity Feed */}
+          {/* Live activity */}
           <motion.div
             variants={I}
             className="rounded-2xl border border-white/[0.06] p-5"
             style={{ background: "#0A0A14" }}
           >
-            <p className="text-[11px] font-bold text-white/40 uppercase tracking-widest mb-4">
+            <p className="text-[11px] font-bold text-white/38 uppercase tracking-widest mb-4">
               Recent Activity
             </p>
             <LiveActivityFeed limit={6} />
@@ -430,18 +396,17 @@ export default function Dashboard() {
 
         {/* Right column */}
         <div className="space-y-4">
-          {/* System Status */}
           <motion.div variants={I}>
             <SystemStatus />
           </motion.div>
 
-          {/* Quick Actions */}
+          {/* Quick actions */}
           <motion.div
             variants={I}
             className="rounded-2xl border border-white/[0.06] p-5"
             style={{ background: "#0A0A14" }}
           >
-            <h3 className="text-[12px] font-bold text-white/45 tracking-widest uppercase mb-4">
+            <h3 className="text-[11px] font-bold text-white/38 tracking-widest uppercase mb-4">
               Quick Actions
             </h3>
             <div className="grid grid-cols-2 gap-2">
@@ -462,7 +427,7 @@ export default function Dashboard() {
                     >
                       <Icon size={16} style={{ color: action.color }} />
                     </div>
-                    <span className="text-[10px] font-semibold text-white/45 group-hover:text-white/75 text-center leading-tight transition-colors">
+                    <span className="text-[10px] font-semibold text-white/45 group-hover:text-white/72 text-center leading-tight transition-colors">
                       {action.label}
                     </span>
                   </motion.button>
@@ -480,7 +445,7 @@ export default function Dashboard() {
             >
               <div className="flex items-center gap-2 mb-4">
                 <Brain size={13} className="text-[#FF6B9D]" />
-                <h3 className="text-[12px] font-bold text-white/45 tracking-widest uppercase">
+                <h3 className="text-[11px] font-bold text-white/38 tracking-widest uppercase">
                   Focus Areas
                 </h3>
               </div>
@@ -492,9 +457,9 @@ export default function Dashboard() {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.3 + i * 0.08 }}
                   >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[12px] text-white/65 capitalize">
-                        {item.subject}
+                    <div className="flex justify-between mb-1.5">
+                      <span className="text-[12px] text-white/62 capitalize">
+                        {item.catObj?.label ?? item.subject}
                       </span>
                       <span className="text-[11px] font-bold text-[#FF6B9D]">
                         {item.accuracy}%
@@ -504,11 +469,7 @@ export default function Dashboard() {
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${item.accuracy}%` }}
-                        transition={{
-                          duration: 0.7,
-                          delay: 0.4 + i * 0.1,
-                          ease: "easeOut",
-                        }}
+                        transition={{ duration: 0.7, delay: 0.4 + i * 0.1 }}
                         className="h-full rounded-full"
                         style={{
                           background:
@@ -520,7 +481,7 @@ export default function Dashboard() {
                 ))}
                 <button
                   onClick={() => navigate("/quiz")}
-                  className="w-full mt-2 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] text-white/28 hover:text-white/55 hover:bg-white/[0.04] transition-all border border-white/[0.04] hover:border-white/[0.08]"
+                  className="w-full mt-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] text-white/28 hover:text-white/55 hover:bg-white/[0.04] transition-all border border-white/[0.04] hover:border-white/[0.08]"
                 >
                   <Trophy size={11} /> Practice these now
                 </button>
@@ -537,23 +498,19 @@ export default function Dashboard() {
                 "linear-gradient(135deg,rgba(0,255,200,0.06),rgba(124,111,255,0.06))",
             }}
           >
-            <div
-              className="absolute top-0 right-0 w-20 h-20 opacity-10 pointer-events-none"
-              style={{
-                background: "radial-gradient(circle,#00FFC8,transparent 70%)",
-              }}
-            />
             <Sparkles size={14} className="text-[#00FFC8]/55 mb-3" />
             <p className="text-[12px] text-white/50 leading-relaxed italic">
               &ldquo;Discipline is choosing between what you want now and what
               you want most.&rdquo;
             </p>
-            <p className="text-[10px] text-[#00FFC8]/45 mt-2 tracking-wider">
-              — StudyMind AI
-            </p>
+            <p className="text-[10px] text-[#00FFC8]/45 mt-2">— StudyMind AI</p>
           </motion.div>
         </div>
       </div>
     </motion.div>
   );
+}
+
+export default function Dashboard() {
+  return <DashboardContent />;
 }

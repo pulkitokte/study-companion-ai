@@ -1,124 +1,139 @@
 import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Brain } from "lucide-react";
+import { Brain, CheckCircle2 } from "lucide-react";
 
-const BOOT_SEQUENCE = [
+const BOOT = [
   {
     text: "Initializing StudyMind OS…",
-    tip: "Your data is stored locally — 100% private.",
+    tip: "Zero-backend · 100% local · Blazing fast",
   },
   {
-    text: "Loading knowledge graph…",
-    tip: "Quiz, focus, and planner data auto-sync.",
+    text: "Loading knowledge engine…",
+    tip: "8 UPSC subjects · Adaptive difficulty",
   },
   {
     text: "Syncing user profile…",
-    tip: "Onboarding data personalizes your AI.",
+    tip: "Onboarding data personalizes your experience",
   },
   {
-    text: "Calibrating AI companion…",
-    tip: "Gemini AI with 5 personality modes.",
+    text: "Calibrating Gemini AI…",
+    tip: "5 personality modes · Real streaming",
   },
   {
     text: "Activating focus engine…",
-    tip: "Pomodoro, Deep Work, Sprint modes ready.",
+    tip: "Pomodoro · Deep Work · Sprint modes",
   },
   {
-    text: "Wiring global XP system…",
-    tip: "Quiz + Focus + Planner XP unify here.",
+    text: "Wiring XP ecosystem…",
+    tip: "Quiz + Focus + Planner → unified progression",
   },
   { text: "System ready.", tip: "Welcome to StudyMind." },
 ];
 
 export default function LoadingScreen({ onComplete }) {
   const [step, setStep] = useState(0);
-  const [progress, setProgress] = useState(0);
-  const [exiting, setExiting] = useState(false);
+  const [done, setDone] = useState(false);
+  const progress = Math.round((step / (BOOT.length - 1)) * 100);
 
   const finish = useCallback(() => {
-    setExiting(true);
-    setTimeout(onComplete, 550);
+    setDone(true);
+    setTimeout(onComplete, 520);
   }, [onComplete]);
 
   useEffect(() => {
-    if (step >= BOOT_SEQUENCE.length - 1) {
-      setTimeout(finish, 600);
+    if (step >= BOOT.length - 1) {
+      setTimeout(finish, 500);
       return;
     }
-    const t = setTimeout(
-      () => {
-        setStep((s) => s + 1);
-        setProgress(
-          Math.round(((step + 1) / (BOOT_SEQUENCE.length - 1)) * 100),
-        );
-      },
-      280 + Math.random() * 80,
-    );
+    const delay = step === 0 ? 300 : 260 + Math.random() * 80;
+    const t = setTimeout(() => setStep((s) => s + 1), delay);
     return () => clearTimeout(t);
   }, [step, finish]);
 
-  const current = BOOT_SEQUENCE[Math.min(step, BOOT_SEQUENCE.length - 1)];
+  const current = BOOT[Math.min(step, BOOT.length - 1)];
+  const isDone = step >= BOOT.length - 1;
 
   return (
     <AnimatePresence>
-      {!exiting && (
+      {!done && (
         <motion.div
           key="boot"
           initial={{ opacity: 1 }}
-          exit={{ opacity: 0, scale: 1.03 }}
-          transition={{ duration: 0.55, ease: [0.4, 0, 0.2, 1] }}
-          className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#050508]"
+          exit={{ opacity: 0, scale: 1.04 }}
+          transition={{ duration: 0.52, ease: [0.4, 0, 0.2, 1] }}
+          className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#050508] overflow-hidden"
         >
-          {/* Background */}
+          {/* Ambient rings */}
           <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            {[0.06, 0.04, 0.025].map((op, i) => (
+              <motion.div
+                key={i}
+                animate={{
+                  scale: [1, 1 + 0.1 * (i + 1), 1],
+                  opacity: [op, op * 2, op],
+                }}
+                transition={{
+                  repeat: Infinity,
+                  duration: 4 + i,
+                  ease: "easeInOut",
+                }}
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
+                style={{
+                  width: `${400 + i * 150}px`,
+                  height: `${400 + i * 150}px`,
+                  background:
+                    i === 0
+                      ? "radial-gradient(circle,#7C6FFF,transparent 70%)"
+                      : i === 1
+                        ? "radial-gradient(circle,#00FFC8,transparent 70%)"
+                        : "radial-gradient(circle,#FF6B9D,transparent 70%)",
+                }}
+              />
+            ))}
+            {/* Horizontal scan line */}
             <motion.div
-              animate={{ scale: [1, 1.35, 1], opacity: [0.05, 0.12, 0.05] }}
-              transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full blur-3xl"
-              style={{
-                background:
-                  "radial-gradient(circle,#7C6FFF 0%,#00FFC8 60%,transparent 80%)",
-              }}
-            />
-            {/* Scan line */}
-            <motion.div
-              animate={{ y: ["-100%", "200%"] }}
+              animate={{ y: ["-10%", "110%"] }}
               transition={{
                 repeat: Infinity,
-                duration: 2.5,
+                duration: 3,
                 ease: "linear",
-                repeatDelay: 0.5,
+                repeatDelay: 0.8,
               }}
-              className="absolute left-0 right-0 h-[1px] opacity-[0.07]"
+              className="absolute left-0 right-0 h-[1px] opacity-[0.06]"
               style={{
                 background:
-                  "linear-gradient(90deg,transparent,#00FFC8,transparent)",
+                  "linear-gradient(90deg,transparent,#00FFC8 30%,#7C6FFF 70%,transparent)",
               }}
             />
           </div>
 
           {/* Logo */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.7, y: 16 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            transition={{ duration: 0.5, type: "spring", stiffness: 200 }}
+            initial={{ opacity: 0, y: 20, scale: 0.75 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{
+              duration: 0.55,
+              type: "spring",
+              stiffness: 180,
+              damping: 18,
+            }}
             className="relative mb-8"
           >
             <motion.div
-              animate={{ opacity: [0.3, 0.8, 0.3] }}
+              animate={{ opacity: [0.35, 0.8, 0.35] }}
               transition={{
                 repeat: Infinity,
-                duration: 2.5,
+                duration: 2.8,
                 ease: "easeInOut",
               }}
-              className="absolute inset-0 rounded-2xl blur-xl"
+              className="absolute inset-0 rounded-[22px] blur-xl"
               style={{ background: "linear-gradient(135deg,#00FFC8,#7C6FFF)" }}
             />
             <div
-              className="relative w-20 h-20 rounded-2xl flex items-center justify-center border border-white/[0.12]"
+              className="relative w-20 h-20 rounded-[22px] flex items-center justify-center border border-white/[0.12]"
               style={{
                 background:
-                  "linear-gradient(135deg,rgba(0,255,200,0.25),rgba(124,111,255,0.25))",
+                  "linear-gradient(135deg,rgba(0,255,200,0.22),rgba(124,111,255,0.22))",
               }}
             >
               <Brain size={36} className="text-white" strokeWidth={2} />
@@ -129,30 +144,29 @@ export default function LoadingScreen({ onComplete }) {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.25 }}
-            className="text-center mb-10"
+            transition={{ delay: 0.3 }}
+            className="text-center mb-10 space-y-0.5"
           >
-            <p className="text-[26px] font-black tracking-[0.22em] text-white uppercase mb-1">
+            <p className="text-[28px] font-black tracking-[0.22em] text-white uppercase">
               StudyMind
             </p>
-            <p className="text-[11px] tracking-[0.4em] text-[#00FFC8]/45 uppercase">
+            <p className="text-[11px] tracking-[0.45em] text-[#00FFC8]/42 uppercase">
               AI Companion · v1.0
             </p>
           </motion.div>
 
           {/* Terminal */}
-          <div className="w-[340px] space-y-4">
+          <div className="w-[340px] max-w-[90vw] space-y-4">
             <div
               className="rounded-xl border border-white/[0.06] overflow-hidden font-mono"
               style={{
                 background: "rgba(0,0,0,0.55)",
-                backdropFilter: "blur(8px)",
+                backdropFilter: "blur(10px)",
               }}
             >
-              {/* Title bar */}
               <div
                 className="flex items-center gap-1.5 px-3 py-2 border-b border-white/[0.04]"
-                style={{ background: "rgba(255,255,255,0.025)" }}
+                style={{ background: "rgba(255,255,255,0.028)" }}
               >
                 {["#FF5F56", "#FFBD2E", "#27C93F"].map((c, i) => (
                   <div
@@ -162,47 +176,58 @@ export default function LoadingScreen({ onComplete }) {
                   />
                 ))}
                 <span className="text-[9px] text-white/15 ml-2 tracking-widest uppercase">
-                  studymind.sys
+                  studymind.core
                 </span>
               </div>
 
-              {/* Lines */}
-              <div className="p-4 space-y-1.5 min-h-[140px]">
-                {BOOT_SEQUENCE.slice(0, step + 1).map((s, i) => (
-                  <motion.p
-                    key={s.text}
-                    initial={{ opacity: 0, x: -4 }}
-                    animate={{ opacity: i === step ? 1 : 0.28 }}
-                    className="text-[11px] leading-relaxed flex items-center gap-2"
-                    style={{
-                      color: i === step ? "#00FFC8" : "rgba(255,255,255,0.28)",
-                    }}
-                  >
-                    <span className="text-[#00FFC8]/40">›</span>
-                    {s.text}
-                    {i === step && step < BOOT_SEQUENCE.length - 1 && (
-                      <motion.span
-                        animate={{ opacity: [1, 0, 1] }}
-                        transition={{ repeat: Infinity, duration: 0.65 }}
-                        className="inline-block w-[7px] h-[12px] align-middle rounded-sm"
-                        style={{ background: "#00FFC8" }}
-                      />
-                    )}
-                  </motion.p>
-                ))}
+              <div className="p-4 space-y-1.5 min-h-[150px]">
+                {BOOT.slice(0, step + 1).map((s, i) => {
+                  const isCurrent = i === step;
+                  const isDoneStep = i < step;
+                  return (
+                    <motion.div
+                      key={s.text}
+                      initial={{ opacity: 0, x: -6 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="flex items-center gap-2 text-[11px]"
+                      style={{
+                        color: isCurrent ? "#00FFC8" : "rgba(255,255,255,0.25)",
+                      }}
+                    >
+                      <span className="shrink-0 text-[#00FFC8]/35">›</span>
+                      <span>{s.text}</span>
+                      {isCurrent && !isDone && (
+                        <motion.span
+                          animate={{ opacity: [1, 0, 1] }}
+                          transition={{ repeat: Infinity, duration: 0.65 }}
+                          className="inline-block w-[7px] h-[12px] rounded-sm shrink-0"
+                          style={{ background: "#00FFC8" }}
+                        />
+                      )}
+                      {(isDoneStep || (isCurrent && isDone)) && (
+                        <CheckCircle2
+                          size={11}
+                          style={{ color: "rgba(0,255,200,0.5)" }}
+                          className="shrink-0"
+                        />
+                      )}
+                    </motion.div>
+                  );
+                })}
               </div>
             </div>
 
             {/* Progress */}
             <div>
-              <div className="flex justify-between text-[9px] text-white/22 mb-1.5">
-                <span>{current.tip}</span>
+              <div className="flex justify-between text-[9px] text-white/20 mb-1.5">
+                <span className="truncate max-w-[70%]">{current.tip}</span>
                 <span>{progress}%</span>
               </div>
-              <div className="h-1 bg-white/[0.06] rounded-full overflow-hidden">
+              <div className="h-[3px] bg-white/[0.06] rounded-full overflow-hidden">
                 <motion.div
                   animate={{ width: `${progress}%` }}
-                  transition={{ duration: 0.3, ease: "easeOut" }}
+                  transition={{ duration: 0.28, ease: "easeOut" }}
                   className="h-full rounded-full"
                   style={{
                     background: "linear-gradient(90deg,#00FFC8,#7C6FFF)",

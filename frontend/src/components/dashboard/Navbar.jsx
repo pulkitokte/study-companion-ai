@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Menu,
   Search,
   Flame,
   Zap,
@@ -15,6 +14,7 @@ import {
 } from "lucide-react";
 import { quickStats } from "../../utils/globalStats.js";
 import { getProfile } from "../../utils/userProfile.js";
+import MobileNav from "../mobile/MobileNav.jsx";
 
 const PAGE_META = {
   "/dashboard": {
@@ -22,19 +22,17 @@ const PAGE_META = {
     subtitle: "Your daily command center",
   },
   "/planner": { title: "Study Planner", subtitle: "Manage your schedule" },
-  "/chat": {
-    title: "Chat Companion",
-    subtitle: "Talk to your AI study partner",
-  },
+  "/chat": { title: "Chat Companion", subtitle: "AI study partner" },
   "/quiz": { title: "Quiz Arena", subtitle: "Test your knowledge" },
   "/progress": { title: "Progress Report", subtitle: "Track your growth" },
   "/focus": { title: "Focus Mode", subtitle: "Deep work session" },
   "/settings": { title: "Settings", subtitle: "Customize your experience" },
+  "/showcase": { title: "Showcase", subtitle: "Portfolio presentation" },
 };
 
 function getGreeting() {
   const h = new Date().getHours();
-  if (h < 5) return "Night owl grind 🌙";
+  if (h < 5) return "Night grind 🌙";
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   if (h < 21) return "Good evening";
@@ -62,21 +60,31 @@ export default function Navbar({ onMenuClick }) {
     title: "StudyMind",
     subtitle: "",
   };
-  const greeting = getGreeting();
 
   return (
     <header
       className="relative z-10 h-[64px] shrink-0 flex items-center justify-between px-4 md:px-6 border-b border-white/[0.05]"
-      style={{ background: "rgba(5,5,12,0.85)", backdropFilter: "blur(14px)" }}
+      style={{ background: "rgba(5,5,12,0.87)", backdropFilter: "blur(14px)" }}
     >
-      {/* Left */}
-      <div className="flex items-center gap-4 min-w-0">
-        <button
-          onClick={onMenuClick}
-          className="lg:hidden p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/[0.06] transition-colors shrink-0"
-        >
-          <Menu size={18} />
-        </button>
+      {/* Left: mobile hamburger + title */}
+      <div className="flex items-center gap-3 min-w-0">
+        {/* Mobile nav drawer trigger */}
+        <MobileNav />
+
+        {/* Desktop menu (hidden on mobile) */}
+        {onMenuClick && (
+          <button
+            onClick={onMenuClick}
+            className="hidden lg:block p-2 rounded-lg text-white/45 hover:text-white hover:bg-white/[0.06] transition-colors"
+          >
+            <div className="w-4 space-y-1">
+              <div className="h-[1.5px] bg-current rounded-full" />
+              <div className="h-[1.5px] bg-current rounded-full w-3/4" />
+              <div className="h-[1.5px] bg-current rounded-full" />
+            </div>
+          </button>
+        )}
+
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}
@@ -86,11 +94,11 @@ export default function Navbar({ onMenuClick }) {
             transition={{ duration: 0.2 }}
             className="min-w-0"
           >
-            <h1 className="text-[15px] font-bold text-white tracking-wide leading-tight truncate">
+            <h1 className="text-[15px] font-bold text-white leading-tight truncate">
               {meta.title}
             </h1>
-            <p className="text-[10px] text-white/25 tracking-wider hidden sm:block">
-              {greeting}
+            <p className="text-[10px] text-white/22 tracking-wider hidden sm:block">
+              {getGreeting()}
             </p>
           </motion.div>
         </AnimatePresence>
@@ -104,7 +112,7 @@ export default function Navbar({ onMenuClick }) {
             <motion.div
               key="open"
               initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 180, opacity: 1 }}
+              animate={{ width: 160, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ duration: 0.22 }}
               className="flex items-center gap-2 h-8 px-3 rounded-lg border border-white/[0.08] bg-white/[0.04] overflow-hidden"
@@ -124,10 +132,7 @@ export default function Navbar({ onMenuClick }) {
                   setSearchQuery("");
                 }}
               >
-                <X
-                  size={12}
-                  className="text-white/30 hover:text-white/60 transition-colors"
-                />
+                <X size={12} className="text-white/30 hover:text-white/60" />
               </button>
             </motion.div>
           ) : (
@@ -137,29 +142,29 @@ export default function Navbar({ onMenuClick }) {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setSearchOpen(true)}
-              className="p-2 rounded-lg text-white/38 hover:text-white/70 hover:bg-white/[0.06] transition-all"
+              className="p-2 rounded-lg text-white/35 hover:text-white/65 hover:bg-white/[0.06] transition-all"
             >
               <Search size={15} />
             </motion.button>
           )}
         </AnimatePresence>
 
-        {/* Stats — desktop */}
+        {/* Stats pills — hidden on small mobile */}
         <div className="hidden md:flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#FF6B2B]/20 bg-[#FF6B2B]/[0.06]">
-            <Flame size={12} className="text-[#FF6B2B]" />
+            <Flame size={11} className="text-[#FF6B2B]" />
             <span className="text-[11px] font-bold text-[#FF6B2B]">
               {streak}d
             </span>
           </div>
           <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#7C6FFF]/20 bg-[#7C6FFF]/[0.06]">
-            <Zap size={12} className="text-[#7C6FFF]" />
+            <Zap size={11} className="text-[#7C6FFF]" />
             <span className="text-[11px] font-bold text-[#7C6FFF]">
               {totalXP.toLocaleString()}
             </span>
           </div>
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#00FFC8]/20 bg-[#00FFC8]/[0.06]">
-            <Target size={12} className="text-[#00FFC8]" />
+          <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#00FFC8]/20 bg-[#00FFC8]/[0.06]">
+            <Target size={11} className="text-[#00FFC8]" />
             <span className="text-[11px] font-bold text-[#00FFC8]">{exam}</span>
           </div>
         </div>
@@ -168,16 +173,16 @@ export default function Navbar({ onMenuClick }) {
         <div className="relative">
           <button
             onClick={() => setProfileOpen((v) => !v)}
-            className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-lg hover:bg-white/[0.06] transition-all group"
+            className="flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-lg hover:bg-white/[0.06] transition-all group"
           >
             <div className="relative">
-              <div className="absolute -inset-0.5 rounded-full bg-gradient-to-br from-[#00FFC8] to-[#7C6FFF] opacity-60 group-hover:opacity-90 transition-opacity" />
-              <div className="relative w-8 h-8 rounded-full bg-[#0F0F1E] flex items-center justify-center text-[11px] font-bold text-white">
+              <div className="absolute -inset-0.5 rounded-full bg-gradient-to-br from-[#00FFC8] to-[#7C6FFF] opacity-55 group-hover:opacity-80 transition-opacity" />
+              <div className="relative w-7 h-7 rounded-full bg-[#0F0F1E] flex items-center justify-center text-[10px] font-bold text-white">
                 {initials}
               </div>
             </div>
             <ChevronDown
-              size={12}
+              size={11}
               className={`text-white/28 transition-transform duration-200 hidden sm:block ${profileOpen ? "rotate-180" : ""}`}
             />
           </button>
@@ -199,7 +204,7 @@ export default function Navbar({ onMenuClick }) {
                 >
                   <div className="px-4 py-3 border-b border-white/[0.06]">
                     <p className="text-[12px] font-bold text-white">{name}</p>
-                    <p className="text-[10px] text-[#00FFC8]/60">
+                    <p className="text-[10px] text-[#00FFC8]/55">
                       {exam} · Level {level}
                     </p>
                   </div>
@@ -212,7 +217,7 @@ export default function Navbar({ onMenuClick }) {
                       className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.04] transition-colors"
                     >
                       <Icon size={13} className="text-white/38" />
-                      <span className="text-[12px] text-white/58">{label}</span>
+                      <span className="text-[12px] text-white/55">{label}</span>
                     </button>
                   ))}
                   <div className="border-t border-white/[0.06]">
