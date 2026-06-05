@@ -1,20 +1,12 @@
 import { useState, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Search,
-  Flame,
-  Zap,
-  Target,
-  ChevronDown,
-  X,
-  Settings,
-  LogOut,
-  User,
-} from "lucide-react";
+import { Search, Flame, Zap, Target, X } from "lucide-react";
 import { quickStats } from "../../utils/globalStats.js";
 import { getProfile } from "../../utils/userProfile.js";
 import MobileNav from "../mobile/MobileNav.jsx";
+import ProfileMenu from "../auth/ProfileMenu.jsx";
+import SyncStatusBadge from "../ui/SyncStatus.jsx";
 
 const PAGE_META = {
   "/dashboard": {
@@ -28,6 +20,7 @@ const PAGE_META = {
   "/focus": { title: "Focus Mode", subtitle: "Deep work session" },
   "/settings": { title: "Settings", subtitle: "Customize your experience" },
   "/showcase": { title: "Showcase", subtitle: "Portfolio presentation" },
+  "/profile": { title: "Profile", subtitle: "Your account and stats" },
 };
 
 function getGreeting() {
@@ -43,19 +36,10 @@ export default function Navbar({ onMenuClick }) {
   const location = useLocation();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [profileOpen, setProfileOpen] = useState(false);
 
-  const { totalXP, streak, level } = useMemo(() => quickStats(), []);
+  const { totalXP, streak } = useMemo(() => quickStats(), []);
   const profile = useMemo(() => getProfile(), []);
-  const name = profile?.name?.trim() || "Scholar";
   const exam = profile?.targetExam || "Exam";
-  const initials =
-    name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase() || "SC";
   const meta = PAGE_META[location.pathname] ?? {
     title: "StudyMind",
     subtitle: "",
@@ -66,16 +50,13 @@ export default function Navbar({ onMenuClick }) {
       className="relative z-10 h-[64px] shrink-0 flex items-center justify-between px-4 md:px-6 border-b border-white/[0.05]"
       style={{ background: "rgba(5,5,12,0.87)", backdropFilter: "blur(14px)" }}
     >
-      {/* Left: mobile hamburger + title */}
+      {/* Left */}
       <div className="flex items-center gap-3 min-w-0">
-        {/* Mobile nav drawer trigger */}
         <MobileNav />
-
-        {/* Desktop menu (hidden on mobile) */}
         {onMenuClick && (
           <button
             onClick={onMenuClick}
-            className="hidden lg:block p-2 rounded-lg text-white/45 hover:text-white hover:bg-white/[0.06] transition-colors"
+            className="hidden lg:block p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/[0.06] transition-colors"
           >
             <div className="w-4 space-y-1">
               <div className="h-[1.5px] bg-current rounded-full" />
@@ -84,7 +65,6 @@ export default function Navbar({ onMenuClick }) {
             </div>
           </button>
         )}
-
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}
@@ -106,7 +86,7 @@ export default function Navbar({ onMenuClick }) {
 
       {/* Right */}
       <div className="flex items-center gap-2 shrink-0">
-        {/* Search */}
+        {/* Inline search */}
         <AnimatePresence mode="wait">
           {searchOpen ? (
             <motion.div
@@ -121,7 +101,7 @@ export default function Navbar({ onMenuClick }) {
               <input
                 autoFocus
                 type="text"
-                placeholder="Search..."
+                placeholder="Search…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="flex-1 bg-transparent text-[12px] text-white placeholder-white/22 outline-none"
@@ -149,7 +129,7 @@ export default function Navbar({ onMenuClick }) {
           )}
         </AnimatePresence>
 
-        {/* Stats pills — hidden on small mobile */}
+        {/* Stats — desktop only */}
         <div className="hidden md:flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#FF6B2B]/20 bg-[#FF6B2B]/[0.06]">
             <Flame size={11} className="text-[#FF6B2B]" />
@@ -169,70 +149,13 @@ export default function Navbar({ onMenuClick }) {
           </div>
         </div>
 
-        {/* Profile */}
-        <div className="relative">
-          <button
-            onClick={() => setProfileOpen((v) => !v)}
-            className="flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-lg hover:bg-white/[0.06] transition-all group"
-          >
-            <div className="relative">
-              <div className="absolute -inset-0.5 rounded-full bg-gradient-to-br from-[#00FFC8] to-[#7C6FFF] opacity-55 group-hover:opacity-80 transition-opacity" />
-              <div className="relative w-7 h-7 rounded-full bg-[#0F0F1E] flex items-center justify-center text-[10px] font-bold text-white">
-                {initials}
-              </div>
-            </div>
-            <ChevronDown
-              size={11}
-              className={`text-white/28 transition-transform duration-200 hidden sm:block ${profileOpen ? "rotate-180" : ""}`}
-            />
-          </button>
-
-          <AnimatePresence>
-            {profileOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-10"
-                  onClick={() => setProfileOpen(false)}
-                />
-                <motion.div
-                  initial={{ opacity: 0, y: -8, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -8, scale: 0.95 }}
-                  transition={{ duration: 0.15 }}
-                  className="absolute right-0 top-[calc(100%+8px)] z-20 w-[200px] rounded-xl border border-white/[0.08] overflow-hidden shadow-2xl"
-                  style={{ background: "#0D0D1A" }}
-                >
-                  <div className="px-4 py-3 border-b border-white/[0.06]">
-                    <p className="text-[12px] font-bold text-white">{name}</p>
-                    <p className="text-[10px] text-[#00FFC8]/55">
-                      {exam} · Level {level}
-                    </p>
-                  </div>
-                  {[
-                    { icon: User, label: "Profile" },
-                    { icon: Settings, label: "Settings" },
-                  ].map(({ icon: Icon, label }) => (
-                    <button
-                      key={label}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.04] transition-colors"
-                    >
-                      <Icon size={13} className="text-white/38" />
-                      <span className="text-[12px] text-white/55">{label}</span>
-                    </button>
-                  ))}
-                  <div className="border-t border-white/[0.06]">
-                    <button className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-red-500/[0.06] transition-colors">
-                      <LogOut size={13} className="text-red-400/55" />
-                      <span className="text-[12px] text-red-400/55">
-                        Sign Out
-                      </span>
-                    </button>
-                  </div>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
+        {/* Sync status */}
+        <div className="hidden sm:block">
+          <SyncStatusBadge compact />
         </div>
+
+        {/* Auth-aware profile */}
+        <ProfileMenu />
       </div>
     </header>
   );
