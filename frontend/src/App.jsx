@@ -3,6 +3,7 @@ import { useState, useCallback, useEffect, lazy, Suspense } from "react";
 import { ToastProvider } from "./components/ui/Toast.jsx";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import { UserProvider } from "./context/UserContext.jsx";
+import { SystemProvider } from "./context/SystemContext.jsx";
 import ErrorBoundary from "./components/ui/ErrorBoundary.jsx";
 import LoadingScreen from "./components/ui/LoadingScreen.jsx";
 import AppRoutes from "./routes/AppRoutes.jsx";
@@ -11,6 +12,7 @@ import BottomTabs from "./components/mobile/BottomTabs.jsx";
 import QuickTour from "./components/launch/QuickTour.jsx";
 import DemoModeBanner from "./components/launch/DemoModeBanner.jsx";
 import UpdateBanner from "./components/premium/UpdateBanner.jsx";
+import OfflineBanner from "./components/system/OfflineBanner.jsx";
 import CommandPalette from "./components/premium/CommandPalette.jsx";
 import KeyboardShortcuts, {
   useKeyboardShortcuts,
@@ -49,18 +51,24 @@ function AppShell() {
     <div style={{ paddingTop: isDemo ? 44 : 0 }}>
       {isDemo && <DemoModeBanner />}
       <UpdateBanner />
+      <OfflineBanner />
+
       <AppRoutes />
+
       <BottomTabs />
       <AuthModal />
+
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
       <KeyboardShortcuts
         open={shortcutsOpen}
         onClose={() => setShortcutsOpen(false)}
       />
+
       <Suspense fallback={null}>
         {!isMobile() && <FloatingAssistant />}
         <NotificationCenter />
       </Suspense>
+
       <QuickTour />
     </div>
   );
@@ -80,8 +88,10 @@ export default function App() {
         <ToastProvider>
           <AuthProvider>
             <UserProvider>
-              {!booted && <LoadingScreen onComplete={handleBoot} />}
-              {booted && <AppShell />}
+              <SystemProvider>
+                {!booted && <LoadingScreen onComplete={handleBoot} />}
+                {booted && <AppShell />}
+              </SystemProvider>
             </UserProvider>
           </AuthProvider>
         </ToastProvider>
