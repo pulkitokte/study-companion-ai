@@ -2,6 +2,7 @@ import { BrowserRouter } from "react-router-dom";
 import { useState, useCallback, useEffect, lazy, Suspense } from "react";
 import { ToastProvider } from "./components/ui/Toast.jsx";
 import { AuthProvider } from "./context/AuthContext.jsx";
+import { UserProvider } from "./context/UserContext.jsx";
 import ErrorBoundary from "./components/ui/ErrorBoundary.jsx";
 import LoadingScreen from "./components/ui/LoadingScreen.jsx";
 import AppRoutes from "./routes/AppRoutes.jsx";
@@ -48,25 +49,18 @@ function AppShell() {
     <div style={{ paddingTop: isDemo ? 44 : 0 }}>
       {isDemo && <DemoModeBanner />}
       <UpdateBanner />
-
       <AppRoutes />
-
       <BottomTabs />
-
-      {/* Auth modal — global, triggered via AuthContext */}
       <AuthModal />
-
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
       <KeyboardShortcuts
         open={shortcutsOpen}
         onClose={() => setShortcutsOpen(false)}
       />
-
       <Suspense fallback={null}>
         {!isMobile() && <FloatingAssistant />}
         <NotificationCenter />
       </Suspense>
-
       <QuickTour />
     </div>
   );
@@ -85,8 +79,10 @@ export default function App() {
       <BrowserRouter>
         <ToastProvider>
           <AuthProvider>
-            {!booted && <LoadingScreen onComplete={handleBoot} />}
-            {booted && <AppShell />}
+            <UserProvider>
+              {!booted && <LoadingScreen onComplete={handleBoot} />}
+              {booted && <AppShell />}
+            </UserProvider>
           </AuthProvider>
         </ToastProvider>
       </BrowserRouter>
