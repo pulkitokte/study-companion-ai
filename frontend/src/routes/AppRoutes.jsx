@@ -15,6 +15,7 @@ const Onboarding = lazy(() => import("../pages/Onboarding.jsx"));
 const Profile = lazy(() => import("../pages/Profile.jsx"));
 const System = lazy(() => import("../pages/System.jsx"));
 const Realtime = lazy(() => import("../pages/Realtime.jsx"));
+const Admin = lazy(() => import("../pages/Admin.jsx"));
 
 function PageLoader() {
   return (
@@ -54,6 +55,7 @@ export default function AppRoutes() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/system" element={<System />} />
           <Route path="/realtime" element={<Realtime />} />
+          <Route path="/admin" element={<Admin />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
