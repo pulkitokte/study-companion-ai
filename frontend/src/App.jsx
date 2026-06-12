@@ -4,6 +4,7 @@ import { ToastProvider } from "./components/ui/Toast.jsx";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import { UserProvider } from "./context/UserContext.jsx";
 import { SystemProvider } from "./context/SystemContext.jsx";
+import { RealtimeProvider } from "./context/RealtimeContext.jsx";
 import ErrorBoundary from "./components/ui/ErrorBoundary.jsx";
 import LoadingScreen from "./components/ui/LoadingScreen.jsx";
 import AppRoutes from "./routes/AppRoutes.jsx";
@@ -89,8 +90,10 @@ export default function App() {
           <AuthProvider>
             <UserProvider>
               <SystemProvider>
-                {!booted && <LoadingScreen onComplete={handleBoot} />}
-                {booted && <AppShell />}
+                <RealtimeProvider>
+                  {!booted && <LoadingScreen onComplete={handleBoot} />}
+                  {booted && <AppShell />}
+                </RealtimeProvider>
               </SystemProvider>
             </UserProvider>
           </AuthProvider>
