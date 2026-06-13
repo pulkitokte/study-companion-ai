@@ -18,6 +18,7 @@ const Realtime = lazy(() => import("../pages/Realtime.jsx"));
 const Admin = lazy(() => import("../pages/Admin.jsx"));
 const DeveloperCenter = lazy(() => import("../pages/DeveloperCenter.jsx"));
 const CloudDashboard = lazy(() => import("../pages/CloudDashboard.jsx"));
+const AICoach = lazy(() => import("../pages/AICoach.jsx"));
 
 function PageLoader() {
   return (
@@ -60,6 +61,7 @@ export default function AppRoutes() {
           <Route path="/admin" element={<Admin />} />
           <Route path="/developer" element={<DeveloperCenter />} />
           <Route path="/cloud" element={<CloudDashboard />} />
+          <Route path="/ai-coach" element={<AICoach />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

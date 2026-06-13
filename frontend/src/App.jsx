@@ -7,6 +7,8 @@ import { SystemProvider } from "./context/SystemContext.jsx";
 import { RealtimeProvider } from "./context/RealtimeContext.jsx";
 import { AdminProvider } from "./context/AdminContext.jsx";
 import { BackendProvider } from "./context/BackendContext.jsx";
+import { CloudProvider } from "./context/CloudContext.jsx";
+import { AgentProvider } from "./context/AgentContext.jsx";
 import ErrorBoundary from "./components/ui/ErrorBoundary.jsx";
 import LoadingScreen from "./components/ui/LoadingScreen.jsx";
 import AppRoutes from "./routes/AppRoutes.jsx";
@@ -95,8 +97,12 @@ export default function App() {
                 <RealtimeProvider>
                   <AdminProvider>
                     <BackendProvider>
-                      {!booted && <LoadingScreen onComplete={handleBoot} />}
-                      {booted && <AppShell />}
+                      <CloudProvider>
+                        <AgentProvider>
+                          {!booted && <LoadingScreen onComplete={handleBoot} />}
+                          {booted && <AppShell />}
+                        </AgentProvider>
+                      </CloudProvider>
                     </BackendProvider>
                   </AdminProvider>
                 </RealtimeProvider>
