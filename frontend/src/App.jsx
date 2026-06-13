@@ -6,6 +6,7 @@ import { UserProvider } from "./context/UserContext.jsx";
 import { SystemProvider } from "./context/SystemContext.jsx";
 import { RealtimeProvider } from "./context/RealtimeContext.jsx";
 import { AdminProvider } from "./context/AdminContext.jsx";
+import { BackendProvider } from "./context/BackendContext.jsx";
 import ErrorBoundary from "./components/ui/ErrorBoundary.jsx";
 import LoadingScreen from "./components/ui/LoadingScreen.jsx";
 import AppRoutes from "./routes/AppRoutes.jsx";
@@ -93,8 +94,10 @@ export default function App() {
               <SystemProvider>
                 <RealtimeProvider>
                   <AdminProvider>
-                    {!booted && <LoadingScreen onComplete={handleBoot} />}
-                    {booted && <AppShell />}
+                    <BackendProvider>
+                      {!booted && <LoadingScreen onComplete={handleBoot} />}
+                      {booted && <AppShell />}
+                    </BackendProvider>
                   </AdminProvider>
                 </RealtimeProvider>
               </SystemProvider>
