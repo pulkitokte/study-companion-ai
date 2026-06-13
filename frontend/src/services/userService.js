@@ -1,68 +1,78 @@
-// User profile + preferences service — sync-ready, backend-agnostic.
+// Storage service — abstraction over StorageAdapter with provider-swap support.
+// Now wired to detect Supabase configuration via supabaseConfig.js.
+// Today: localStorage only. The cloud sync engine handles reconciliation
+// separately (see cloudSyncEngine.js) — this layer remains the fast,
+// always-available local read/write path.
 
 import StorageAdapter, { NAMESPACES } from "../lib/storageAdapter.js";
-import {
-  getPreferences,
-  setPreference,
-  setPreferences,
-  resetPreferences,
-  getNotifPrefs,
-  getStudyGoals,
-} from "../lib/userPreferences.js";
-import {
-  buildUserSnapshot,
-  getCachedSnapshot,
-  exportSnapshot,
-  importFromSnapshot,
-  mergeSnapshots,
-} from "../lib/userSyncEngine.js";
-import { enqueueSync } from "../lib/cloudSync.js";
+import { supabaseConfig } from "../config/supabaseConfig.js";
+import env from "../lib/env.js";
 
-export const userService = {
-  // ─── PROFILE ────────────────────────────────────────────────
-  getProfile() {
-    return StorageAdapter.get(NAMESPACES.profile, null);
+// ─── PROVIDER ABSTRACTION ──────────────────────────────────────────
+const localProvider = {
+  name: "localStorage",
+  get: (ns, fallback) => StorageAdapter.get(ns, fallback),
+  set: (ns, value) => StorageAdapter.set(ns, value),
+  merge: (ns, partial) => StorageAdapter.merge(ns, partial),
+  remove: (ns) => StorageAdapter.remove(ns),
+  prepend: (ns, item, max) => StorageAdapter.prepend(ns, item, max),
+  append: (ns, item, max) => StorageAdapter.append(ns, item, max),
+};
+
+// Active provider — local remains primary; cloudSyncEngine reconciles
+// with Supabase in the background once configured.
+const _provider = localProvider;
+
+export function getActiveProvider() {
+  return _provider.name;
+}
+
+export function isRemoteReady() {
+  return supabaseConfig.configured || env.hasBackend;
+}
+
+export function getRemoteProviderName() {
+  if (supabaseConfig.configured) return "supabase";
+  if (env.hasBackend) return "rest";
+  return "none";
+}
+
+// ─── CORE API ────────────────────────────────────────────────────
+export const storageService = {
+  get(namespace, fallback = null) {
+    return _provider.get(namespace, fallback);
+  },
+  set(namespace, value) {
+    return _provider.set(namespace, value);
+  },
+  merge(namespace, partial) {
+    return _provider.merge(namespace, partial);
+  },
+  remove(namespace) {
+    return _provider.remove(namespace);
+  },
+  prepend(namespace, item, maxLen = 200) {
+    return _provider.prepend(namespace, item, maxLen);
+  },
+  append(namespace, item, maxLen = 200) {
+    return _provider.append(namespace, item, maxLen);
   },
 
-  updateProfile(partial) {
-    const current = this.getProfile() ?? {};
-    const updated = {
-      ...current,
-      ...partial,
-      updatedAt: new Date().toISOString(),
-    };
-    StorageAdapter.set(NAMESPACES.profile, updated);
-    enqueueSync("profile_update", updated);
-    return updated;
+  getActiveProvider,
+  isRemoteReady,
+  getRemoteProviderName,
+
+  // Pass-through utilities (always local — diagnostics)
+  keys() {
+    return StorageAdapter.keys();
   },
-
-  isOnboarded() {
-    return (
-      StorageAdapter.get(NAMESPACES.onboarded) === true ||
-      localStorage.getItem("studymind_onboarded") === "true"
-    );
+  size() {
+    return StorageAdapter.size();
   },
-
-  // ─── PREFERENCES ────────────────────────────────────────────
-  getPreferences,
-  setPreference,
-  setPreferences,
-  resetPreferences,
-  getNotifPrefs,
-  getStudyGoals,
-
-  // ─── SNAPSHOT / SYNC ────────────────────────────────────────
-  buildSnapshot: buildUserSnapshot,
-  getCachedSnapshot,
-  mergeSnapshots,
-
-  exportProfile() {
-    return exportSnapshot();
-  },
-
-  importProfile(json) {
-    return importFromSnapshot(json);
+  clearAll() {
+    return StorageAdapter.clearAll();
   },
 };
 
-export default userService;
+export { NAMESPACES };
+export default storageService;

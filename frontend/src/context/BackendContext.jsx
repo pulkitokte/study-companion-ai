@@ -20,6 +20,7 @@ import {
   getSchemaVersion,
 } from "../lib/dataMigration.js";
 import { getStorageSize } from "../utils/performanceMonitor.js";
+import { supabaseConfig } from "../config/supabaseConfig.js";
 import env from "../lib/env.js";
 
 const BackendContext = createContext(null);
@@ -82,6 +83,7 @@ export function BackendProvider({ children }) {
       schemaVersion: getSchemaVersion(),
       backendMode: env.isMock ? "mock" : env.hasSupabase ? "supabase" : "rest",
       isMock: env.isMock,
+      cloudConfigured: supabaseConfig.configured,
       services: getServiceList(),
       getService,
       refresh,
