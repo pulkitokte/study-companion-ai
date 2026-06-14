@@ -25,7 +25,7 @@ import { getLogs, clearLogs } from "../lib/errorLogger.js";
 import { clearQueue } from "../lib/offlineQueue.js";
 import { cacheClear } from "../lib/cacheManager.js";
 import { API_ROUTES } from "../lib/apiRoutes.js";
-import SystemConsole from "../components/system/SystemConsole.jsx";
+import SystemConsole from "../components/settings/SystemConsole.jsx";
 
 const C = { hidden: {}, visible: { transition: { staggerChildren: 0.06 } } };
 const I = {

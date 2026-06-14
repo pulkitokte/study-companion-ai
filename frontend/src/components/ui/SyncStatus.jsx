@@ -1,41 +1,44 @@
 import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { Cloud, CloudOff, Loader2, CheckCircle2 } from "lucide-react";
-import { getSyncStatus, SyncStatus } from "../../lib/cloudSync.js";
+import {
+  getSyncStatus,
+  SyncStatus as SyncStatusEnum,
+} from "../../lib/cloudSync.js";
 import env from "../../lib/env.js";
 
 const CONFIG = {
-  [SyncStatus.MOCK]: {
+  [SyncStatusEnum.MOCK]: {
     icon: Cloud,
     color: "#FFB347",
     label: "Local mode",
     pulse: false,
   },
-  [SyncStatus.OFFLINE]: {
+  [SyncStatusEnum.OFFLINE]: {
     icon: CloudOff,
     color: "#FF6B6B",
     label: "Offline",
     pulse: false,
   },
-  [SyncStatus.SYNCING]: {
+  [SyncStatusEnum.SYNCING]: {
     icon: Loader2,
     color: "#7C6FFF",
     label: "Syncing…",
     pulse: true,
   },
-  [SyncStatus.SYNCED]: {
+  [SyncStatusEnum.SYNCED]: {
     icon: CheckCircle2,
     color: "#00FFC8",
     label: "Synced",
     pulse: false,
   },
-  [SyncStatus.ERROR]: {
+  [SyncStatusEnum.ERROR]: {
     icon: CloudOff,
     color: "#FFB347",
     label: "Sync error",
     pulse: false,
   },
-  [SyncStatus.IDLE]: {
+  [SyncStatusEnum.IDLE]: {
     icon: Cloud,
     color: "#888",
     label: "Not synced",
@@ -59,7 +62,7 @@ export default function SyncStatus({ compact = true }) {
           />
         ) : (
           <div className="relative w-1.5 h-1.5">
-            {status === SyncStatus.SYNCED && (
+            {status === SyncStatusEnum.SYNCED && (
               <motion.div
                 animate={{ scale: [1, 1.8, 1], opacity: [0.6, 0, 0.6] }}
                 transition={{ repeat: Infinity, duration: 2.5 }}

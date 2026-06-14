@@ -6,7 +6,7 @@ import {
   Zap,
   Flame,
   Trophy,
-  Github,
+  Globe,
   ArrowRight,
   Brain,
   Star,
@@ -143,7 +143,7 @@ export default function Showcase() {
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/[0.09] text-[11px] text-white/40 hover:text-white/70 hover:bg-white/[0.05] transition-all"
           >
-            <Github size={13} /> Source
+            <Globe size={13} /> Source
           </a>
           <button
             onClick={() => navigate("/dashboard")}
@@ -326,7 +326,7 @@ export default function Showcase() {
             rel="noopener noreferrer"
             className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-[12px] border border-white/[0.09] text-white/50 hover:text-white/75 hover:bg-white/[0.04] transition-all"
           >
-            <Github size={14} /> GitHub
+            <Globe size={14} /> GitHub
           </a>
         </div>
       </motion.div>

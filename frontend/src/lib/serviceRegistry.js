@@ -1,4 +1,6 @@
-import storageService from "../services/storageService.js";
+import storageService, {
+  getActiveProvider,
+} from "../services/storageService.js";
 import authService from "../services/authService.js";
 import userService from "../services/userService.js";
 import quizService from "../services/quizService.js";
@@ -15,7 +17,7 @@ export const SERVICES = {
   storage: {
     name: "Storage Service",
     instance: storageService,
-    provider: storageService.getActiveProvider(),
+    provider: getActiveProvider(),
     description: "Namespaced localStorage abstraction, backend-swappable",
     ready: true,
   },

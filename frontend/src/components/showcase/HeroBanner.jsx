@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Brain,
   ArrowRight,
-  Github,
+  Globe,
   ExternalLink,
   Zap,
   Flame,
@@ -216,7 +216,7 @@ export default function HeroBanner() {
           rel="noopener noreferrer"
           className="flex items-center gap-2.5 px-7 py-3.5 rounded-xl font-bold text-[14px] border border-white/[0.12] text-white/65 hover:text-white hover:bg-white/[0.05] transition-all"
         >
-          <Github size={16} /> View Source
+          <Globe size={16} /> View Source
         </motion.a>
       </motion.div>
     </div>

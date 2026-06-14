@@ -13,7 +13,6 @@ const Settings = lazy(() => import("../pages/Settings.jsx"));
 const Showcase = lazy(() => import("../pages/Showcase.jsx"));
 const Onboarding = lazy(() => import("../pages/Onboarding.jsx"));
 const Profile = lazy(() => import("../pages/Profile.jsx"));
-const System = lazy(() => import("../pages/System.jsx"));
 const Realtime = lazy(() => import("../pages/Realtime.jsx"));
 const Admin = lazy(() => import("../pages/Admin.jsx"));
 const DeveloperCenter = lazy(() => import("../pages/DeveloperCenter.jsx"));
@@ -56,7 +55,7 @@ export default function AppRoutes() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/showcase" element={<Showcase />} />
           <Route path="/profile" element={<Profile />} />
-          <Route path="/system" element={<System />} />
+        
           <Route path="/realtime" element={<Realtime />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/developer" element={<DeveloperCenter />} />

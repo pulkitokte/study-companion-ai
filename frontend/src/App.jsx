@@ -17,7 +17,7 @@ import BottomTabs from "./components/mobile/BottomTabs.jsx";
 import QuickTour from "./components/launch/QuickTour.jsx";
 import DemoModeBanner from "./components/launch/DemoModeBanner.jsx";
 import UpdateBanner from "./components/premium/UpdateBanner.jsx";
-import OfflineBanner from "./components/system/OfflineBanner.jsx";
+import OfflineBanner from "./components/settings/OfflineBanner.jsx";
 import CommandPalette from "./components/premium/CommandPalette.jsx";
 import KeyboardShortcuts, {
   useKeyboardShortcuts,
