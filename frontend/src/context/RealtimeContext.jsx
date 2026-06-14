@@ -6,7 +6,8 @@ import {
   useCallback,
   useMemo,
 } from "react";
-import realtimeEngine, {
+// Removed unused default import `realtimeEngine` — only named exports are used
+import {
   connect,
   disconnect,
   attemptReconnect,
@@ -37,7 +38,6 @@ export function RealtimeProvider({ children }) {
   const [liveSession, setLiveSession] = useState(() => getLiveSession());
   const [eventLog, setEventLog] = useState([]);
 
-  // Push an event onto the live feed
   const pushEvent = useCallback((type, label, meta = {}) => {
     setEventLog((prev) =>
       [
@@ -53,7 +53,6 @@ export function RealtimeProvider({ children }) {
     );
   }, []);
 
-  // Init connection on mount
   useEffect(() => {
     connect();
     setPresence("online", "idle");
@@ -88,7 +87,7 @@ export function RealtimeProvider({ children }) {
     };
   }, [pushEvent]);
 
-  // Refresh stats periodically
+  // Periodic refresh of simulated real-time data
   useEffect(() => {
     const interval = setInterval(() => {
       setDevices(getAllDevices());
@@ -99,7 +98,6 @@ export function RealtimeProvider({ children }) {
     return () => clearInterval(interval);
   }, []);
 
-  // ─── ACTIONS ────────────────────────────────────────────────────
   const refreshAll = useCallback(() => {
     setDevices(getAllDevices());
     setPresenceState(getPresenceSummary());

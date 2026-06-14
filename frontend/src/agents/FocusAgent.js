@@ -1,7 +1,12 @@
+// FIX: replaced `import { FOCUS_MODES } from '../context/FocusContext.jsx'`
+// with import from the standalone data constants file.
+// Agents must not depend on React context layer — doing so risks circular deps
+// and breaks server-side / test-environment imports.
 import { getFocusHistory, getFocusStats } from "../utils/focusStorage.js";
 import { getFocusModeBreakdown } from "../lib/analyticsEngine.js";
+import { FOCUS_MODES } from "../data/focusModes.js";
 
-// ─── DISTRACTION / PATTERN ANALYSIS ─────────────────────────────────
+// ─── PATTERN ANALYSIS ─────────────────────────────────────────────
 function analyzeFocusPatterns() {
   const history = getFocusHistory() ?? [];
   const breakdown = getFocusModeBreakdown();
@@ -22,6 +27,7 @@ function analyzeFocusPatterns() {
   const avgSessionMins = Math.round(
     history.reduce((s, f) => s + (f.durationMinutes ?? 0), 0) / history.length,
   );
+
   const completed = history.filter((f) => f.completed !== false).length;
   const completionRate = Math.round((completed / history.length) * 100);
 
@@ -37,7 +43,7 @@ function analyzeFocusPatterns() {
       const hour = new Date(f.date).getHours();
       hourCounts[hour] = (hourCounts[hour] ?? 0) + 1;
     } catch {
-      /* ignore */
+      /* ignore bad dates */
     }
   });
   const preferredHour =
@@ -54,7 +60,7 @@ function analyzeFocusPatterns() {
   };
 }
 
-// ─── PRODUCTIVITY SUGGESTIONS ───────────────────────────────────────
+// ─── IMPROVEMENT SUGGESTIONS ──────────────────────────────────────
 function suggestImprovements() {
   const analysis = analyzeFocusPatterns();
   const tips = [];
@@ -73,14 +79,14 @@ function suggestImprovements() {
   if (analysis.avgSessionMins < 20) {
     tips.push({
       title: "Try longer sessions",
-      detail: `Your average session is ${analysis.avgSessionMins} minutes. Gradually working up to 25-45 minutes can deepen focus.`,
+      detail: `Your average session is ${analysis.avgSessionMins} minutes. Gradually working up to 25–45 minutes can deepen focus.`,
       icon: "⏱️",
       color: "#00FFC8",
     });
   } else if (analysis.avgSessionMins > 60) {
     tips.push({
       title: "Consider shorter bursts",
-      detail: `Your sessions average ${analysis.avgSessionMins} minutes. Try Sprint mode (15-20 min) for high-intensity review between long sessions.`,
+      detail: `Sessions average ${analysis.avgSessionMins} minutes. Try Sprint mode (15 min) for high-intensity review between long sessions.`,
       icon: "⚡",
       color: "#FFB347",
     });
@@ -89,7 +95,7 @@ function suggestImprovements() {
   if (analysis.completionRate < 70) {
     tips.push({
       title: "Improve session completion",
-      detail: `Only ${analysis.completionRate}% of sessions are completed. Try removing your phone or using a quieter time slot.`,
+      detail: `Only ${analysis.completionRate}% of sessions are completed. Try removing your phone or choosing a quieter time slot.`,
       icon: "🎯",
       color: "#FF6B6B",
     });
@@ -110,7 +116,7 @@ function suggestImprovements() {
         : `${hour === 12 ? 12 : hour - 12} PM`;
     tips.push({
       title: `Your peak hour: ${label}`,
-      detail: `Most of your focus sessions happen around ${label}. Schedule your hardest topics during this window.`,
+      detail: `Most focus sessions happen around ${label}. Schedule your hardest topics during this window.`,
       icon: "🧠",
       color: "#7C6FFF",
     });
@@ -128,7 +134,7 @@ function suggestImprovements() {
   return tips.slice(0, 4);
 }
 
-// ─── DISTRACTION ANALYSIS (heuristic) ───────────────────────────────
+// ─── DISTRACTION ANALYSIS ─────────────────────────────────────────
 function getDistractionAnalysis() {
   const history = getFocusHistory() ?? [];
   if (history.length === 0) return { riskLevel: "unknown", signals: [] };
@@ -137,19 +143,21 @@ function getDistractionAnalysis() {
   const incompleteRate = Math.round((incomplete / history.length) * 100);
 
   const signals = [];
-  if (incompleteRate > 30)
+  if (incompleteRate > 30) {
     signals.push(
       `${incompleteRate}% of sessions ended early — possible distractions interrupting focus.`,
     );
-  if (history.length < 3)
+  }
+  if (history.length < 3) {
     signals.push("Limited data — log more sessions for deeper analysis.");
+  }
 
   const riskLevel =
     incompleteRate > 40 ? "high" : incompleteRate > 15 ? "moderate" : "low";
   return { riskLevel, incompleteRate, signals };
 }
 
-// ─── RECOMMENDATIONS (for recommendationEngine) ─────────────────────
+// ─── RECOMMENDATIONS ──────────────────────────────────────────────
 function getRecommendations() {
   const tips = suggestImprovements();
   return tips.map((t, i) => ({
@@ -164,9 +172,11 @@ function getRecommendations() {
   }));
 }
 
+// ─── PUBLIC API ───────────────────────────────────────────────────
 export default {
   analyzeFocusPatterns,
   suggestImprovements,
   getDistractionAnalysis,
   getRecommendations,
+  getModes: () => FOCUS_MODES, // now reads from data layer, not context
 };

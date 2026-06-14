@@ -40,14 +40,27 @@ import {
 
 const AdminContext = createContext(null);
 
+// Helper — builds the analytics snapshot from current localStorage state
+function buildAnalytics() {
+  return {
+    events: getEventSummary(),
+    xpTimeline: getXPTimeline(14),
+    categoryBreakdown: getCategoryBreakdown(),
+    focusBreakdown: getFocusModeBreakdown(),
+    weeklyTrend: getWeeklyTrend(),
+  };
+}
+
 export function AdminProvider({ children }) {
   const [unlocked, setUnlocked] = useState(() => isAdminUnlocked());
   const [flags, setFlags] = useState(() => getFeatureFlags());
   const [overview, setOverview] = useState(() => getAdminOverview());
   const [actionLog, setActionLog] = useState(() => getAdminLog());
   const [announcements, setAnnouncements] = useState(() => getAnnouncements());
+  // analytics is now its own state slice so wipeEvents() can refresh it independently
+  const [analyticsData, setAnalyticsData] = useState(() => buildAnalytics());
 
-  // ─── AUTH ────────────────────────────────────────────────────
+  // ─── AUTH ───────────────────────────────────────────────────
   const login = useCallback((passcode) => {
     const ok = unlockAdmin(passcode);
     if (ok) {
@@ -63,7 +76,7 @@ export function AdminProvider({ children }) {
     setActionLog(getAdminLog());
   }, []);
 
-  // ─── FEATURE FLAGS ───────────────────────────────────────────
+  // ─── FEATURE FLAGS ──────────────────────────────────────────
   const toggleFlag = useCallback(
     (key) => {
       const current = flags[key];
@@ -82,38 +95,31 @@ export function AdminProvider({ children }) {
     return updated;
   }, []);
 
-  // ─── DATA TOOLS ──────────────────────────────────────────────
+  // ─── DATA TOOLS ─────────────────────────────────────────────
   const resetModule = useCallback((moduleKey) => {
     const result = resetModuleData(moduleKey);
     setOverview(getAdminOverview());
+    setAnalyticsData(buildAnalytics()); // module reset may affect analytics
     setActionLog(getAdminLog());
     return result;
   }, []);
 
   const refreshOverview = useCallback(() => {
     setOverview(getAdminOverview());
+    setAnalyticsData(buildAnalytics());
     setActionLog(getAdminLog());
   }, []);
 
-  // ─── ANALYTICS ───────────────────────────────────────────────
-  const analytics = useMemo(
-    () => ({
-      events: getEventSummary(),
-      xpTimeline: getXPTimeline(14),
-      categoryBreakdown: getCategoryBreakdown(),
-      focusBreakdown: getFocusModeBreakdown(),
-      weeklyTrend: getWeeklyTrend(),
-    }),
-    [overview],
-  );
-
+  // ─── ANALYTICS ──────────────────────────────────────────────
+  // FIX: wipeEvents now also refreshes analyticsData state so the panel updates
   const wipeEvents = useCallback(() => {
     clearEvents();
     logAdminAction("events_cleared", {});
     setActionLog(getAdminLog());
+    setAnalyticsData(buildAnalytics()); // was missing — caused stale analytics UI
   }, []);
 
-  // ─── CONTENT MANAGEMENT ──────────────────────────────────────
+  // ─── CONTENT MANAGEMENT ─────────────────────────────────────
   const [questionBank, setQuestionBank] = useState(() =>
     getQuestionBankStats(),
   );
@@ -144,7 +150,7 @@ export function AdminProvider({ children }) {
     setActionLog(getAdminLog());
   }, []);
 
-  // ─── ANNOUNCEMENTS ───────────────────────────────────────────
+  // ─── ANNOUNCEMENTS ──────────────────────────────────────────
   const addAnnouncement = useCallback((data) => {
     const entry = createAnnouncement(data);
     setAnnouncements(getAnnouncements());
@@ -183,7 +189,7 @@ export function AdminProvider({ children }) {
       resetModule,
       actionLog,
       clearLog,
-      analytics,
+      analytics: analyticsData, // renamed from inline useMemo to state-driven
       wipeEvents,
       questionBank,
       customQuestions,
@@ -200,7 +206,7 @@ export function AdminProvider({ children }) {
       flags,
       overview,
       actionLog,
-      analytics,
+      analyticsData,
       questionBank,
       customQuestions,
       announcements,

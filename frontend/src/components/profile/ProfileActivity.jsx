@@ -5,7 +5,7 @@ import { getQuizHistory } from "../../utils/quizStorage.js";
 import { getFocusHistory } from "../../utils/focusStorage.js";
 import { getPlanner } from "../../utils/plannerStorage.js";
 import { CATEGORIES } from "../../data/mockQuizData.js";
-import { getLast30Days } from "../../utils/progressStorage.js";
+import { getLast30Days } from "../../utils/activityCalendar.js";
 
 const MODE_META = {
   pomodoro: { emoji: "🍅", color: "#FF6B2B" },

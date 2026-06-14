@@ -1,16 +1,16 @@
 import { aggregateAll } from "../utils/globalStats.js";
+// FIX: removed unused `getUnifiedStreak` — it was imported but never called
+// in any of the agent's function bodies. Streak comes from stats.streak via aggregateAll().
 import {
   getWeakSubjects,
   getTodaySummary,
   getDisplayName,
   getTargetExam,
-  getUnifiedStreak,
 } from "../utils/userProfile.js";
 import {
   getCategoryBreakdown,
   getWeeklyTrend,
 } from "../lib/analyticsEngine.js";
-import { CATEGORIES } from "../data/mockQuizData.js";
 import { addMemoryEntry } from "../lib/agentMemory.js";
 
 // ─── LEARNING ANALYSIS ─────────────────────────────────────────────
@@ -25,7 +25,6 @@ function analyzeLearning(stats = null) {
   const strongSubjects = breakdown
     .filter((c) => c.accuracy >= 80)
     .sort((a, b) => b.accuracy - a.accuracy);
-
   const trend = getWeeklyTrend();
 
   let summary;
@@ -44,11 +43,14 @@ function analyzeLearning(stats = null) {
   return { stats: s, breakdown, weakSubjects, strongSubjects, trend, summary };
 }
 
-// ─── PERSONALIZED GUIDANCE ──────────────────────────────────────────
+// ─── PERSONALIZED GUIDANCE ────────────────────────────────────────
 function getPersonalizedGuidance(stats = null) {
-  const analysis = analyzeLearning(stats);
-  const { weakSubjects, strongSubjects, trend, stats: s } = analysis;
-
+  const {
+    weakSubjects,
+    strongSubjects,
+    trend,
+    stats: s,
+  } = analyzeLearning(stats);
   const tips = [];
 
   if (weakSubjects.length > 0) {
@@ -99,13 +101,12 @@ function getPersonalizedGuidance(stats = null) {
   return tips.slice(0, 4);
 }
 
-// ─── DAILY BRIEFING ─────────────────────────────────────────────────
+// ─── DAILY BRIEFING ───────────────────────────────────────────────
 function getDailyBriefing(stats = null) {
   const s = stats ?? aggregateAll();
   const name = getDisplayName?.() ?? "Scholar";
   const exam = getTargetExam?.() ?? "your exam";
   const today = getTodaySummary?.() ?? {};
-  const analysis = analyzeLearning(s);
 
   const hour = new Date().getHours();
   const greeting =
@@ -117,15 +118,16 @@ function getDailyBriefing(stats = null) {
           ? "Good afternoon"
           : hour < 21
             ? "Good evening"
-            : "Late night session";
+            : "Late session 🔥";
 
   let motivational;
-  if ((s.streak ?? 0) >= 7)
+  if ((s.streak ?? 0) >= 7) {
     motivational = `${s.streak} days strong — you're building a habit that will carry you through ${exam}.`;
-  else if ((s.streak ?? 0) >= 1)
+  } else if ((s.streak ?? 0) >= 1) {
     motivational = `You're on a ${s.streak}-day streak. Consistency beats intensity — keep showing up.`;
-  else
+  } else {
     motivational = `Every session counts. Start small today and build from here.`;
+  }
 
   const topPriority = getPersonalizedGuidance(s)[0] ?? {
     title: "Start your day",
@@ -137,7 +139,7 @@ function getDailyBriefing(stats = null) {
   return {
     greeting: `${greeting}, ${name}`,
     motivational,
-    summary: analysis.summary,
+    summary: analyzeLearning(s).summary,
     todayXP: today.xpEarned ?? 0,
     todayMinutes: today.focusMinutes ?? 0,
     streak: s.streak ?? 0,
@@ -145,10 +147,9 @@ function getDailyBriefing(stats = null) {
   };
 }
 
-// ─── RECOMMENDATIONS (for recommendationEngine) ────────────────────
+// ─── RECOMMENDATIONS ──────────────────────────────────────────────
 function getRecommendations(stats = null) {
-  const guidance = getPersonalizedGuidance(stats);
-  return guidance.map((g, i) => ({
+  return getPersonalizedGuidance(stats).map((g, i) => ({
     agent: "coach",
     title: g.title,
     description: g.detail,
@@ -160,10 +161,10 @@ function getRecommendations(stats = null) {
   }));
 }
 
-// ─── RECORD INSIGHT (persisted to memory) ───────────────────────────
+// ─── RECORD INSIGHT ───────────────────────────────────────────────
 function recordInsight() {
-  const analysis = analyzeLearning();
-  return addMemoryEntry("insight", analysis.summary, 2);
+  const { summary } = analyzeLearning();
+  return addMemoryEntry("insight", summary, 2);
 }
 
 export default {

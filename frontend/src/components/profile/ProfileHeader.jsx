@@ -1,8 +1,13 @@
 import { motion } from "framer-motion";
-import { Shield, Cloud, Zap, Flame, Star } from "lucide-react";
+// FIX: removed unused `Cloud` import.
+// FIX: added missing `SyncStatusBadge` import — component was rendered in JSX
+//      but never imported, causing "ReferenceError: SyncStatusBadge is not defined"
+//      on every Profile page render.
+import { Shield, Zap, Flame, Star } from "lucide-react";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useUser } from "../../context/UserContext.jsx";
 import { useGlobalStats } from "../../hooks/useGlobalStats.js";
+import SyncStatusBadge from "../ui/SyncStatus.jsx";
 import env from "../../lib/env.js";
 
 export default function ProfileHeader({ onSignIn }) {
@@ -35,7 +40,7 @@ export default function ProfileHeader({ onSignIn }) {
           "linear-gradient(135deg,rgba(124,111,255,0.1),rgba(0,255,200,0.06),rgba(5,5,12,0))",
       }}
     >
-      {/* Corner glow */}
+      {/* Ambient glow */}
       <div
         className="absolute top-0 right-0 w-56 h-40 opacity-10 pointer-events-none"
         style={{
@@ -73,6 +78,7 @@ export default function ProfileHeader({ onSignIn }) {
 
         {/* Info */}
         <div className="flex-1 min-w-0">
+          {/* Name + badges */}
           <div className="flex flex-wrap items-center gap-2 mb-1">
             <h2 className="text-[22px] font-black text-white leading-tight">
               {name}
@@ -105,7 +111,7 @@ export default function ProfileHeader({ onSignIn }) {
             </p>
           )}
 
-          {/* Mini stats */}
+          {/* Mini stats + sync badge */}
           <div className="flex flex-wrap gap-3 mt-3">
             {[
               {
@@ -145,11 +151,13 @@ export default function ProfileHeader({ onSignIn }) {
                 </span>
               </div>
             )}
+            {/* SyncStatusBadge — now correctly imported above */}
+            <SyncStatusBadge compact={false} />
           </div>
         </div>
       </div>
 
-      {/* Cloud sync CTA */}
+      {/* Cloud sync CTA for unauthenticated users */}
       {!isAuthenticated && (
         <motion.div
           initial={{ opacity: 0, y: 8 }}
@@ -160,7 +168,7 @@ export default function ProfileHeader({ onSignIn }) {
           <Shield size={15} className="text-[#7C6FFF] shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-[12px] font-bold text-white">
-              Unlock cloud sync & multi-device access
+              Unlock cloud sync &amp; multi-device access
             </p>
             <p className="text-[10px] text-white/35 mt-0.5">
               Your data currently lives only on this browser.

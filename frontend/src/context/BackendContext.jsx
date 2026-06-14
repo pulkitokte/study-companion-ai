@@ -12,26 +12,37 @@ import {
   getService,
 } from "../lib/serviceRegistry.js";
 import {
-  exportEcosystem,
   downloadEcosystemExport,
   importEcosystem,
   validateEcosystemImport,
   migrateLegacyKeys,
   getSchemaVersion,
 } from "../lib/dataMigration.js";
-import { getStorageSize } from "../utils/performanceMonitor.js";
+// FIX: getStorageSize was imported from performanceMonitor.js where it does NOT exist.
+// Replaced with StorageAdapter.size() via a local helper defined below.
+import StorageAdapter from "../lib/storageAdapter.js";
 import { supabaseConfig } from "../config/supabaseConfig.js";
 import env from "../lib/env.js";
 
 const BackendContext = createContext(null);
 
+// ─── LOCAL HELPER (replaces missing `getStorageSize` from performanceMonitor) ──
+function getStorageInfo() {
+  const bytes = StorageAdapter.size();
+  return {
+    bytes,
+    kb: parseFloat((bytes / 1024).toFixed(1)),
+    pct: Math.min(Math.round((bytes / (5 * 1024 * 1024)) * 100), 100),
+  };
+}
+
 export function BackendProvider({ children }) {
   const [registry, setRegistry] = useState(() => getRegistryHealth());
-  const [storageInfo, setStorageInfo] = useState(() => getStorageSize());
+  const [storageInfo, setStorageInfo] = useState(() => getStorageInfo());
   const [lastAction, setLastAction] = useState(null);
 
+  // Run legacy key migration once on mount (safe no-op if nothing to migrate)
   useEffect(() => {
-    // Run legacy key migration once on mount (safe no-op if nothing to migrate)
     const result = migrateLegacyKeys();
     if (result.migrated > 0) {
       setLastAction({
@@ -44,7 +55,7 @@ export function BackendProvider({ children }) {
 
   const refresh = useCallback(() => {
     setRegistry(getRegistryHealth());
-    setStorageInfo(getStorageSize());
+    setStorageInfo(getStorageInfo());
   }, []);
 
   const exportData = useCallback(() => {
