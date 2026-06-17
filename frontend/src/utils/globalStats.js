@@ -1,6 +1,7 @@
 import { getQuizHistory }  from './quizStorage.js'
 import { getFocusHistory } from './focusStorage.js'
-import { getPlanner }      from './plannerStorage.js'
+import { getPlanner } from './plannerStorage.js'
+import StorageAdapter, { NAMESPACES } from '../lib/storageAdapter.js'
 
 const XP_PER_LEVEL = 500
 
@@ -12,8 +13,21 @@ export function aggregateAll() {
   // ── XP ──────────────────────────────────────────────────────────
   const quizXP   = qH.reduce((s, q) => s + (q.totalXP    ?? 0), 0)
   const focusXP  = fH.reduce((s, f) => s + (f.xpEarned   ?? 0), 0)
-  const plannerXP= tasks.filter(t => t.done).reduce((s, t) => s + (t.xp ?? 0), 0)
-  const totalXP  = quizXP + focusXP + plannerXP
+  const plannerXP = tasks.filter(t => t.done).reduce((s, t) => s + (t.xp ?? 0), 0)
+  const _syllabusRaw = StorageAdapter.get(NAMESPACES.syllabus, null);
+  let syllabusXP = 0;
+  if (_syllabusRaw?.exams) {
+    Object.values(_syllabusRaw.exams).forEach((exam) => {
+      syllabusXP += exam.bonusXPEarned ?? 0;
+      Object.values(exam.subjects ?? {}).forEach((subject) => {
+        syllabusXP += subject.bonusXPEarned ?? 0;
+        Object.values(subject.topics ?? {}).forEach((topic) => {
+          syllabusXP += topic.xpEarned ?? 0;
+        });
+      });
+    });
+  }
+  const totalXP = quizXP + focusXP + plannerXP + syllabusXP;
 
   // ── LEVEL ───────────────────────────────────────────────────────
   const level   = Math.floor(totalXP / XP_PER_LEVEL) + 1
@@ -89,29 +103,39 @@ export function aggregateAll() {
 
   return {
     // XP
-    totalXP, quizXP, focusXP, plannerXP,
-    todayXP, todayFocusMins, todayQuizDone,
+    totalXP,
+    quizXP,
+    focusXP,
+    plannerXP,
+    syllabusXP,
+    todayXP,
+    todayFocusMins,
+    todayQuizDone,
     // Level
-    level, xpInto, levelPct, xpToNextLevel: XP_PER_LEVEL - xpInto,
+    level,
+    xpInto,
+    levelPct,
+    xpToNextLevel: XP_PER_LEVEL - xpInto,
     // Streak
     streak,
     // Rank
-    rank, nextRank,
+    rank,
+    nextRank,
     // Totals
-    totalQuizzes:        qH.length,
-    totalFocusSessions:  fH.length,
+    totalQuizzes: qH.length,
+    totalFocusSessions: fH.length,
     totalFocusMins,
     avgQuizAcc,
     plannerDone,
     plannerTotal,
     // Achievements
     achievementsUnlocked: unlocked.size,
-    achievementIds:       unlocked,
+    achievementIds: unlocked,
     // Scores
     prodScore,
     // Missions
     missions,
-  }
+  };
 }
 
 // Lightweight version for Navbar/Sidebar (avoids heavy recalc)

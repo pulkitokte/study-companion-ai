@@ -84,6 +84,7 @@ export const StorageAdapter = {
 }
 
 // ─── TYPED NAMESPACES ────────────────────────────────────────────
+// In the NAMESPACES export object — add ONE line:
 export const NAMESPACES = {
   profile:     'profile',
   onboarded:   'onboarded',
@@ -104,6 +105,7 @@ export const NAMESPACES = {
   errorLog:    'error_log',
   snapshot:    'user_snapshot',
   prefs:       'user_prefs',
+  syllabus:    'syllabus',     // ← ADD THIS LINE ONLY
 }
 
 export default StorageAdapter
