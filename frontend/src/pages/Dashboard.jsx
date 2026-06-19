@@ -35,6 +35,7 @@ import {
   checkMissionsAutoComplete,
 } from "../utils/progressStorage.js";
 import { CATEGORIES } from "../data/mockQuizData.js";
+import SyllabusDashboardWidget from "../components/syllabus/SyllabusDashboardWidget.jsx";
 
 // Return mobile layout on small screens
 function DashboardContent() {
@@ -305,6 +306,10 @@ function DesktopDashboard() {
             </motion.div>
           );
         })}
+      </motion.div>
+      {/* Syllabus Dashboard Widget */}
+      <motion.div variants={I}>
+        <SyllabusDashboardWidget />
       </motion.div>
 
       {/* Smart recommendations */}

@@ -1,0 +1,450 @@
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  ArrowLeft,
+  BookOpen,
+  Zap,
+  CheckCircle2,
+  RefreshCw,
+  ChevronRight,
+  Star,
+  Award,
+} from "lucide-react";
+import syllabusService from "../services/syllabusService.js";
+import { getAllExams, getExam } from "../data/syllabusData.js";
+import { useToast } from "../components/ui/Toast.jsx";
+import TopicPanel from "../components/syllabus/TopicPanel.jsx";
+import SyllabusProgressRing from "../components/syllabus/SyllabusProgressRing.jsx";
+import SyllabusStats from "../components/syllabus/SyllabusStats.jsx";
+
+// ─── ANIMATION VARIANTS ───────────────────────────────────────────────────────
+const C = { hidden: {}, visible: { transition: { staggerChildren: 0.07 } } };
+const I = {
+  hidden: { opacity: 0, y: 14 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.28, ease: "easeOut" },
+  },
+};
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+function fmtAgo(iso) {
+  try {
+    const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+    if (m < 1) return "just now";
+    if (m < 60) return `${m}m ago`;
+    if (m < 1440) return `${Math.floor(m / 60)}h ago`;
+    return `${Math.floor(m / 1440)}d ago`;
+  } catch {
+    return "";
+  }
+}
+
+const ACTION_META = {
+  topic_completed: { label: "Completed", color: "#00FFC8" },
+  topic_revised: { label: "Revised", color: "#7C6FFF" },
+  topic_mastered: { label: "Mastered", color: "#FFD700" },
+  topic_revision_needed: { label: "Flagged", color: "#FF6B2B" },
+  subject_completed: { label: "Subject Complete", color: "#00FFC8" },
+  subject_mastered: { label: "Subject Mastered", color: "#FFD700" },
+  exam_half_complete: { label: "50% Milestone", color: "#FF6B2B" },
+  exam_full_complete: { label: "Exam Complete", color: "#FFD700" },
+};
+
+// ─── SUBJECT CARD ─────────────────────────────────────────────────────────────
+function SubjectCard({ subject, index, onOpen }) {
+  const progress = subject.progress ?? {};
+  const pct = progress.pct ?? 0;
+  const done = progress.done ?? 0;
+  const total = progress.total ?? 0;
+  const mastered = progress.mastered ?? 0;
+  const xpEarned = progress.xpEarned ?? 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.04, duration: 0.25 }}
+      whileHover={{ scale: 1.02, y: -2 }}
+      onClick={() => onOpen(subject)}
+      className="relative overflow-hidden rounded-2xl border border-white/[0.06] p-4 cursor-pointer group transition-all"
+      style={{ background: done > 0 ? `${subject.color}09` : "#0A0A14" }}
+    >
+      <div
+        className="absolute top-0 left-0 right-0 h-[1px] opacity-0 group-hover:opacity-100 transition-opacity"
+        style={{
+          background: `linear-gradient(90deg,transparent,${subject.color},transparent)`,
+        }}
+      />
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="text-xl leading-none shrink-0">{subject.emoji}</span>
+          <div className="min-w-0">
+            <p className="text-[12px] font-bold text-white leading-tight truncate">
+              {subject.label}
+            </p>
+            <p className="text-[10px] text-white/28 mt-0.5">{total} topics</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0 ml-2">
+          <span
+            className="text-[13px] font-black"
+            style={{
+              color: pct > 0 ? subject.color : "rgba(255,255,255,0.22)",
+            }}
+          >
+            {pct}%
+          </span>
+          <ChevronRight
+            size={13}
+            className="text-white/18 group-hover:text-white/45 transition-colors"
+          />
+        </div>
+      </div>
+      <div className="h-1.5 bg-white/[0.05] rounded-full overflow-hidden mb-3">
+        <motion.div
+          className="h-full rounded-full"
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{
+            duration: 0.75,
+            delay: index * 0.04 + 0.1,
+            ease: "easeOut",
+          }}
+          style={{
+            background: pct > 0 ? subject.color : "rgba(255,255,255,0.08)",
+          }}
+        />
+      </div>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <CheckCircle2
+            size={11}
+            style={{
+              color: done > 0 ? subject.color : "rgba(255,255,255,0.18)",
+            }}
+          />
+          <span className="text-[10px] text-white/42">
+            {done}/{total} done
+          </span>
+        </div>
+        <div className="flex items-center gap-2.5">
+          {mastered > 0 && (
+            <div className="flex items-center gap-1">
+              <Star size={10} className="text-[#FFD700]" />
+              <span className="text-[9px] text-[#FFD700] font-bold">
+                {mastered}
+              </span>
+            </div>
+          )}
+          {xpEarned > 0 && (
+            <div className="flex items-center gap-1">
+              <Zap size={10} className="text-[#7C6FFF]" />
+              <span className="text-[9px] text-[#7C6FFF] font-bold">
+                {xpEarned}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── ACTIVITY ROW ─────────────────────────────────────────────────────────────
+function ActivityRow({ entry, index }) {
+  const meta = ACTION_META[entry.action] ?? {
+    label: entry.action,
+    color: "#888",
+  };
+  const hasTopicLabel = typeof entry.topicLabel === "string";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.04 }}
+      className="flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.04] last:border-0"
+    >
+      <div
+        className="w-2 h-2 rounded-full shrink-0"
+        style={{ background: meta.color, boxShadow: `0 0 5px ${meta.color}50` }}
+      />
+      <div className="flex-1 min-w-0">
+        {hasTopicLabel ? (
+          <>
+            <p className="text-[11px] text-white/70 leading-snug truncate">
+              {entry.topicLabel}
+            </p>
+            <p className="text-[9px] text-white/28 mt-0.5 capitalize">
+              {entry.subject} · {meta.label}
+            </p>
+          </>
+        ) : (
+          <p className="text-[11px] text-white/70 leading-snug">
+            {(entry.exam ?? "").toUpperCase()} — {meta.label}
+          </p>
+        )}
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        {entry.xp > 0 && (
+          <span className="text-[10px] font-bold text-[#7C6FFF]">
+            +{entry.xp} XP
+          </span>
+        )}
+        <span className="text-[9px] text-white/20">
+          {fmtAgo(entry.timestamp)}
+        </span>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
+export default function SyllabusTracker() {
+  const navigate = useNavigate();
+  const { show } = useToast();
+
+  const [activeExam, setActiveExamState] = useState(() =>
+    syllabusService.getActiveExam(),
+  );
+  const [examProgress, setExamProgress] = useState(null);
+  const [subjectData, setSubjectData] = useState([]);
+  const [activityLog, setActivityLog] = useState([]);
+  const [selectedSubject, setSelectedSubject] = useState(null);
+
+  const allExams = useMemo(() => getAllExams(), []);
+  const examDef = useMemo(() => getExam(activeExam), [activeExam]);
+
+  const loadData = useCallback(() => {
+    setExamProgress(syllabusService.getExamProgress(activeExam));
+    setSubjectData(syllabusService.getAllSubjectProgress(activeExam));
+    setActivityLog(syllabusService.getActivityLog(10));
+  }, [activeExam]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+  useEffect(() => {
+    setSelectedSubject(null);
+  }, [activeExam]);
+
+  const handleExamChange = useCallback((examId) => {
+    syllabusService.setActiveExam(examId);
+    setActiveExamState(examId);
+  }, []);
+
+  const handleRefresh = () => {
+    loadData();
+    show({ type: "info", title: "Refreshed", duration: 1500 });
+  };
+
+  const handleSubjectOpen = useCallback((subject) => {
+    setSelectedSubject(subject);
+  }, []);
+  const handleProgressChange = useCallback(() => {
+    loadData();
+  }, [loadData]);
+
+  const pct = examProgress?.pct ?? 0;
+  const done = examProgress?.done ?? 0;
+  const total = examProgress?.total ?? 0;
+  const mastered = examProgress?.mastered ?? 0;
+  const xpEarned = examProgress?.xpEarned ?? 0;
+
+  return (
+    <>
+      <motion.div
+        variants={C}
+        initial="hidden"
+        animate="visible"
+        className="space-y-6 max-w-5xl mx-auto pb-16"
+      >
+        {/* Header */}
+        <motion.div
+          variants={I}
+          className="flex items-center justify-between gap-3"
+        >
+          <button
+            onClick={() => navigate("/dashboard")}
+            className="flex items-center gap-2 text-[12px] text-white/30 hover:text-white/65 transition-colors"
+          >
+            <ArrowLeft size={14} /> Dashboard
+          </button>
+          <button
+            onClick={handleRefresh}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/[0.08] text-[11px] font-bold text-white/35 hover:text-white/60 hover:bg-white/[0.04] transition-all"
+          >
+            <RefreshCw size={12} /> Refresh
+          </button>
+        </motion.div>
+
+        {/* Hero */}
+        <motion.div
+          variants={I}
+          className="relative overflow-hidden rounded-3xl border border-white/[0.07] p-6 md:p-7"
+          style={{
+            background: `linear-gradient(135deg, ${examDef?.color ?? "#7C6FFF"}12, rgba(5,5,12,0))`,
+          }}
+        >
+          <div
+            className="absolute top-0 left-0 right-0 h-[1.5px]"
+            style={{
+              background: `linear-gradient(90deg,transparent,${examDef?.color ?? "#7C6FFF"},transparent)`,
+            }}
+          />
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+            <SyllabusProgressRing
+              pct={pct}
+              color={examDef?.color ?? "#7C6FFF"}
+              size={108}
+            />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-2xl leading-none">{examDef?.emoji}</span>
+                <h2 className="text-[20px] font-black text-white leading-tight">
+                  {examDef?.shortLabel}
+                </h2>
+              </div>
+              <p className="text-[11px] text-white/35 mb-4 leading-relaxed">
+                {examDef?.description}
+              </p>
+              <SyllabusStats
+                done={done}
+                total={total}
+                mastered={mastered}
+                xpEarned={xpEarned}
+                subjectCount={subjectData.length}
+                examColor={examDef?.color ?? "#7C6FFF"}
+              />
+            </div>
+          </div>
+          {total > 0 && done === 0 && (
+            <div className="mt-5 px-4 py-3 rounded-2xl border border-white/[0.06] bg-white/[0.02]">
+              <div className="flex items-center gap-2 justify-center">
+                <BookOpen size={14} className="text-white/30 shrink-0" />
+                <p className="text-[12px] text-white/38 text-center">
+                  Select a subject below and mark your first topic complete to
+                  start tracking.
+                </p>
+              </div>
+            </div>
+          )}
+        </motion.div>
+
+        {/* Exam Selector */}
+        <motion.div
+          variants={I}
+          className="flex gap-1.5 overflow-x-auto scrollbar-none"
+        >
+          {allExams.map((exam) => {
+            const active = exam.id === activeExam;
+            return (
+              <button
+                key={exam.id}
+                onClick={() => handleExamChange(exam.id)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border shrink-0 text-[12px] font-bold transition-all duration-200"
+                style={{
+                  background: active
+                    ? `${exam.color}14`
+                    : "rgba(255,255,255,0.025)",
+                  borderColor: active
+                    ? `${exam.color}42`
+                    : "rgba(255,255,255,0.07)",
+                  color: active ? exam.color : "rgba(255,255,255,0.35)",
+                  boxShadow: active ? `0 0 14px ${exam.color}12` : "none",
+                }}
+              >
+                <span className="text-base leading-none">{exam.emoji}</span>
+                {exam.shortLabel}
+              </button>
+            );
+          })}
+        </motion.div>
+
+        {/* Subject Grid */}
+        <motion.div variants={I}>
+          <p className="text-[11px] font-bold text-white/32 uppercase tracking-widest mb-3">
+            Subjects
+          </p>
+          {subjectData.length === 0 ? (
+            <div
+              className="flex flex-col items-center gap-2 py-12 rounded-2xl border border-white/[0.05]"
+              style={{ background: "#0A0A14" }}
+            >
+              <BookOpen size={28} className="text-white/18" />
+              <p className="text-[12px] text-white/28">No subjects found</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {subjectData.map((subject, i) => (
+                <SubjectCard
+                  key={subject.id}
+                  subject={subject}
+                  index={i}
+                  onOpen={handleSubjectOpen}
+                />
+              ))}
+            </div>
+          )}
+        </motion.div>
+
+        {/* Recent Activity */}
+        <motion.div variants={I}>
+          <p className="text-[11px] font-bold text-white/32 uppercase tracking-widest mb-3">
+            Recent Activity
+          </p>
+          <div
+            className="rounded-2xl border border-white/[0.06] overflow-hidden"
+            style={{ background: "#0A0A14" }}
+          >
+            {activityLog.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-10 text-center px-4">
+                <BookOpen size={26} className="text-white/16" />
+                <p className="text-[12px] text-white/28">No activity yet</p>
+                <p className="text-[10px] text-white/18 max-w-xs leading-relaxed">
+                  Complete a topic from any subject to begin your syllabus
+                  journey.
+                </p>
+              </div>
+            ) : (
+              activityLog.map((entry, i) => (
+                <ActivityRow
+                  key={`${entry.timestamp ?? i}-${i}`}
+                  entry={entry}
+                  index={i}
+                />
+              ))
+            )}
+          </div>
+        </motion.div>
+      </motion.div>
+
+      {/* Topic Panel */}
+      <AnimatePresence>
+        {selectedSubject && (
+          <>
+            <motion.div
+              key="backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.22 }}
+              className="fixed inset-0 bg-black/65 z-[200] backdrop-blur-[2px]"
+              onClick={() => setSelectedSubject(null)}
+            />
+            <TopicPanel
+              key={`panel-${selectedSubject.id}`}
+              examId={activeExam}
+              subject={selectedSubject}
+              onClose={() => setSelectedSubject(null)}
+              onProgressChange={handleProgressChange}
+            />
+          </>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}

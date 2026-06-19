@@ -301,6 +301,46 @@ export const ALL_ACHIEVEMENTS = {
     color: "#00FFC8",
     category: "streak",
   },
+  // Add the following entries inside ALL_ACHIEVEMENTS in progressStorage.js.
+  // These entries sit alongside the existing quiz/focus/streak achievements.
+  // The key must exactly match the IDs written by syllabusService._checkAchievements.
+
+  // ─── SYLLABUS ACHIEVEMENTS (add to ALL_ACHIEVEMENTS) ─────────────────────────
+  syllabus_first_topic: {
+    label: "First Step",
+    emoji: "📖",
+    desc: "Complete your first syllabus topic",
+    color: "#00FFC8",
+    xp: 50,
+  },
+  syllabus_ten_topics: {
+    label: "Getting Started",
+    emoji: "📚",
+    desc: "Complete 10 syllabus topics",
+    color: "#7C6FFF",
+    xp: 100,
+  },
+  syllabus_fifty_topics: {
+    label: "Deep Diver",
+    emoji: "🧠",
+    desc: "Complete 50 syllabus topics",
+    color: "#FFB347",
+    xp: 250,
+  },
+  syllabus_ten_mastered: {
+    label: "Master Scholar",
+    emoji: "⭐",
+    desc: "Master 10 syllabus topics",
+    color: "#FFD700",
+    xp: 200,
+  },
+  syllabus_subject_complete: {
+    label: "Subject Expert",
+    emoji: "🎯",
+    desc: "Complete all topics in one subject",
+    color: "#FF6B9D",
+    xp: 300,
+  },
   // XP
   xp_500: {
     label: "XP Seeker",

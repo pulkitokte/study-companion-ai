@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Brain,
   Flame,
+  BookOpen,
   Zap,
 } from "lucide-react";
 import { useGlobalStats } from "../../hooks/useGlobalStats.js";
@@ -53,6 +54,7 @@ const NAV = [
     color: "#4FC3F7",
     desc: "Track Growth",
   },
+  { path: "/syllabus", label: "Syllabus", icon: BookOpen },
   {
     path: "/focus",
     icon: Timer,
