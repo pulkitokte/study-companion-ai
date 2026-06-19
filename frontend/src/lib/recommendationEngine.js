@@ -9,113 +9,100 @@ import {
   markRecommendationFeedback,
 } from "./agentMemory.js";
 
-// ─── UNIFIED RECOMMENDATION GENERATION ───────────────────────────────
-export function generateRecommendations({ persist = true, limit = 6 } = {}) {
+const MAX_RECS = 8;
+
+// ─── CORE GENERATOR ───────────────────────────────────────────────────────────
+function generateRecommendations() {
   const stats = aggregateAll();
 
   const all = [
-    ...StudyCoachAgent.getRecommendations(stats),
-    ...PlannerAgent.getRecommendations(stats),
-    ...FocusAgent.getRecommendations(stats),
-    ...ProgressAgent.getRecommendations(stats),
+    // Quiz / study coaching
+    ...safeCall(() => StudyCoachAgent.getRecommendations(stats)),
+    // Syllabus coverage awareness (Batch 9)
+    ...safeCall(() => StudyCoachAgent.getSyllabusRecommendations()),
+    // Planner-based nudges
+    ...safeCall(() => PlannerAgent.getRecommendations()),
+    // Focus pattern insights
+    ...safeCall(() => FocusAgent.getRecommendations()),
+    // Progress / rank milestones
+    ...safeCall(() => ProgressAgent.getRecommendations(stats)),
   ];
 
-  // Deduplicate by title, keep highest priority
-  const byTitle = new Map();
-  all.forEach((r) => {
-    const existing = byTitle.get(r.title);
-    if (!existing || r.priority > existing.priority) byTitle.set(r.title, r);
+  // Deduplicate by title (same recommendation from multiple agents)
+  const seen = new Set();
+  const deduped = all.filter((rec) => {
+    const key = rec.title;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 
-  const sorted = [...byTitle.values()]
-    .sort((a, b) => b.priority - a.priority)
-    .slice(0, limit);
-
-  if (persist) {
-    sorted.forEach((r) => logRecommendation(r));
-  }
-
-  return sorted;
+  return deduped
+    .sort((a, b) => (b.priority ?? 50) - (a.priority ?? 50))
+    .slice(0, MAX_RECS);
 }
 
-// ─── STUDY PATH GENERATION ────────────────────────────────────────────
-// A simple ordered sequence of next-best-actions across the ecosystem
-export function generateStudyPath() {
-  const stats = aggregateAll();
-  const plan = PlannerAgent.getStudyPlan();
-  const focus = FocusAgent.analyzeFocusPatterns();
-  const coach = StudyCoachAgent.analyzeLearning(stats);
-
-  const path = [];
-
-  if (plan.overdue.length > 0) {
-    path.push({
-      step: 1,
-      label: `Clear overdue task: "${plan.overdue[0].title}"`,
-      path: "/planner",
-      icon: "⏰",
-    });
+// ─── FILTERED (respects dismiss history) ──────────────────────────────────────
+function getRankedRecommendations() {
+  try {
+    const active = getActiveRecommendations() ?? [];
+    const dismissed = new Set(
+      active.filter((r) => r.status === "dismissed").map((r) => r.title),
+    );
+    return generateRecommendations().filter((r) => !dismissed.has(r.title));
+  } catch {
+    return generateRecommendations();
   }
-
-  if (coach.weakSubjects.length > 0) {
-    path.push({
-      step: path.length + 1,
-      label: `Quiz session: ${coach.weakSubjects[0].label}`,
-      path: "/quiz",
-      icon: coach.weakSubjects[0].emoji ?? "📘",
-    });
-  }
-
-  if (!focus.hasData || focus.completionRate < 80) {
-    path.push({
-      step: path.length + 1,
-      label: "Run a focused study session",
-      path: "/focus",
-      icon: "🍅",
-    });
-  }
-
-  if (plan.dueToday.length > 0) {
-    path.push({
-      step: path.length + 1,
-      label: `Complete: "${plan.dueToday[0].title}"`,
-      path: "/planner",
-      icon: "📅",
-    });
-  }
-
-  if (path.length === 0) {
-    path.push({
-      step: 1,
-      label: "Review your progress and set a new goal",
-      path: "/progress",
-      icon: "🎯",
-    });
-  }
-
-  return path.slice(0, 4);
 }
 
-// ─── FEEDBACK PASSTHROUGH ─────────────────────────────────────────────
-export function acceptRecommendation(id) {
-  return markRecommendationFeedback(id, "accepted");
+// ─── FEEDBACK ACTIONS ─────────────────────────────────────────────────────────
+function acceptRecommendation(rec) {
+  try {
+    logRecommendation({
+      ...rec,
+      status: "accepted",
+      acceptedAt: new Date().toISOString(),
+    });
+  } catch {}
 }
 
-export function dismissRecommendation(id) {
-  return markRecommendationFeedback(id, "dismissed");
+function dismissRecommendation(rec) {
+  try {
+    markRecommendationFeedback(rec, "dismissed");
+  } catch {}
 }
 
-export function completeRecommendation(id) {
-  return markRecommendationFeedback(id, "completed");
+function completeRecommendation(rec) {
+  try {
+    markRecommendationFeedback(rec, "completed");
+  } catch {}
 }
 
-export { getActiveRecommendations };
+// ─── SAFE CALL WRAPPER ────────────────────────────────────────────────────────
+// Prevents one broken agent from crashing the entire recommendation feed.
+function safeCall(fn) {
+  try {
+    const result = fn();
+    return Array.isArray(result) ? result : [];
+  } catch {
+    return [];
+  }
+}
 
-export default {
+export {
   generateRecommendations,
-  generateStudyPath,
+  getRankedRecommendations,
   acceptRecommendation,
   dismissRecommendation,
   completeRecommendation,
-  getActiveRecommendations,
+  getActiveRecommendations, // re-exported so AgentContext can import from one place
+};
+
+export default {
+  generateRecommendations,
+  getRankedRecommendations,
+  acceptRecommendation,
+  dismissRecommendation,
+  completeRecommendation,
+  getActiveRecommendations, // mirrors named export
 };

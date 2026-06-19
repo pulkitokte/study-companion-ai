@@ -13,7 +13,6 @@ import ProgressAgent from "../agents/ProgressAgent.js";
 import { aggregateAll } from "../utils/globalStats.js";
 import {
   generateRecommendations,
-  generateStudyPath,
   acceptRecommendation,
   dismissRecommendation,
   completeRecommendation,
@@ -36,7 +35,7 @@ export function AgentProvider({ children }) {
     const active = getActiveRecommendations();
     return active.length > 0 ? active : generateRecommendations();
   });
-  const [studyPath, setStudyPath] = useState(() => generateStudyPath());
+  const [studyPath, setStudyPath] = useState([]);
   const [insights, setInsights] = useState(() => getRecentInsights());
   const [preferences, setPreferences] = useState(() => getPreferenceProfile());
 
@@ -46,7 +45,7 @@ export function AgentProvider({ children }) {
     setStats(freshStats);
     setBriefing(StudyCoachAgent.getDailyBriefing(freshStats));
     setRecommendations(generateRecommendations());
-    setStudyPath(generateStudyPath());
+    setStudyPath([]);
     setInsights(getRecentInsights());
   }, []);
 
