@@ -10,6 +10,7 @@ import {
 } from "../../utils/plannerStorage.js";
 import TaskCard from "./TaskCard.jsx";
 import { useToast } from "../ui/Toast.jsx";
+import { syncTaskCompletionToSyllabus } from '../../utils/plannerSyllabusSync.js'
 
 const SUBJECTS = [
   "Polity",
@@ -210,10 +211,14 @@ export default function ScheduleBoard({ dateStr }) {
 
   const refresh = () => setTasks(getTasks(dateStr));
 
-  const handleToggle = (id) => {
-    toggleTask(id);
-    refresh();
-  };
+ const handleToggle = (id) => {
+   const task = tasks.find((t) => t.id === id);
+   toggleTask(id);
+   if (task && !task.done) {
+     syncTaskCompletionToSyllabus({ ...task, done: true });
+   }
+   refresh();
+ };
   const handleDelete = (id) => {
     deleteTask(id);
     refresh();

@@ -5,6 +5,7 @@ import StudyCalendar from "../components/planner/StudyCalendar.jsx";
 import ScheduleBoard from "../components/planner/ScheduleBoard.jsx";
 import { getProfile } from "../utils/userProfile.js";
 import { getPlanner, generateDefaultTasks } from "../utils/plannerStorage.js";
+import { syncTaskCompletionToSyllabus } from "../utils/plannerSyllabusSync.js";
 
 export default function Planner() {
   const today = new Date().toISOString().slice(0, 10);

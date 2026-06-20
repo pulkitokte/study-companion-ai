@@ -26,6 +26,7 @@ import { clearQueue } from "../lib/offlineQueue.js";
 import { cacheClear } from "../lib/cacheManager.js";
 import { API_ROUTES } from "../lib/apiRoutes.js";
 import SystemConsole from "../components/settings/SystemConsole.jsx";
+import SyllabusSettingsSection from "../components/syllabus/SyllabusSettingsSection.jsx";
 
 const C = { hidden: {}, visible: { transition: { staggerChildren: 0.06 } } };
 const I = {
@@ -585,7 +586,8 @@ export default function System() {
           </p>
         </div>
       </motion.div>
-
+      {/* Syllabus Settings */}
+      <SyllabusSettingsSection />
       {/* Console overlay */}
       <SystemConsole open={consoleOpen} onClose={() => setConsoleOpen(false)} />
     </motion.div>
