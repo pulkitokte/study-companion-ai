@@ -17,6 +17,7 @@ import { useToast } from "../components/ui/Toast.jsx";
 import TopicPanel from "../components/syllabus/TopicPanel.jsx";
 import SyllabusProgressRing from "../components/syllabus/SyllabusProgressRing.jsx";
 import SyllabusStats from "../components/syllabus/SyllabusStats.jsx";
+import SyllabusAnalyticsView from "../components/syllabus/analytics/SyllabusAnalyticsView.jsx";
 
 // ─── ANIMATION VARIANTS ───────────────────────────────────────────────────────
 const C = { hidden: {}, visible: { transition: { staggerChildren: 0.07 } } };
@@ -28,6 +29,12 @@ const I = {
     transition: { duration: 0.28, ease: "easeOut" },
   },
 };
+
+// ─── VIEW TABS CONFIG ─────────────────────────────────────────────────────────
+const VIEW_TABS = [
+  { id: "overview", icon: "📋", label: "Overview" },
+  { id: "analytics", icon: "📊", label: "Analytics" },
+];
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 function fmtAgo(iso) {
@@ -103,6 +110,7 @@ function SubjectCard({ subject, index, onOpen }) {
           />
         </div>
       </div>
+
       <div className="h-1.5 bg-white/[0.05] rounded-full overflow-hidden mb-3">
         <motion.div
           className="h-full rounded-full"
@@ -118,6 +126,7 @@ function SubjectCard({ subject, index, onOpen }) {
           }}
         />
       </div>
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <CheckCircle2
@@ -207,6 +216,7 @@ export default function SyllabusTracker() {
   const navigate = useNavigate();
   const { show } = useToast();
 
+  // ── State ──────────────────────────────────────────────────────────────────
   const [activeExam, setActiveExamState] = useState(() =>
     syllabusService.getActiveExam(),
   );
@@ -214,23 +224,31 @@ export default function SyllabusTracker() {
   const [subjectData, setSubjectData] = useState([]);
   const [activityLog, setActivityLog] = useState([]);
   const [selectedSubject, setSelectedSubject] = useState(null);
+  const [view, setView] = useState("overview");
 
   const allExams = useMemo(() => getAllExams(), []);
   const examDef = useMemo(() => getExam(activeExam), [activeExam]);
+  const accent = examDef?.color ?? "#7C6FFF";
 
+  // ── Data loading ───────────────────────────────────────────────────────────
+  // Fetch 90 entries so analytics charts have sufficient history.
+  // Overview activity feed slices to 10 at render time.
   const loadData = useCallback(() => {
     setExamProgress(syllabusService.getExamProgress(activeExam));
     setSubjectData(syllabusService.getAllSubjectProgress(activeExam));
-    setActivityLog(syllabusService.getActivityLog(10));
+    setActivityLog(syllabusService.getActivityLog(90));
   }, [activeExam]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Close topic panel when switching exams
   useEffect(() => {
     setSelectedSubject(null);
   }, [activeExam]);
 
+  // ── Handlers ───────────────────────────────────────────────────────────────
   const handleExamChange = useCallback((examId) => {
     syllabusService.setActiveExam(examId);
     setActiveExamState(examId);
@@ -248,6 +266,7 @@ export default function SyllabusTracker() {
     loadData();
   }, [loadData]);
 
+  // ── Derived values ─────────────────────────────────────────────────────────
   const pct = examProgress?.pct ?? 0;
   const done = examProgress?.done ?? 0;
   const total = examProgress?.total ?? 0;
@@ -260,9 +279,9 @@ export default function SyllabusTracker() {
         variants={C}
         initial="hidden"
         animate="visible"
-        className="space-y-6 max-w-5xl mx-auto pb-16"
+        className="space-y-5 max-w-5xl mx-auto pb-16"
       >
-        {/* Header */}
+        {/* ── Page header ─────────────────────────────────────────────────── */}
         <motion.div
           variants={I}
           className="flex items-center justify-between gap-3"
@@ -275,32 +294,30 @@ export default function SyllabusTracker() {
           </button>
           <button
             onClick={handleRefresh}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/[0.08] text-[11px] font-bold text-white/35 hover:text-white/60 hover:bg-white/[0.04] transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/[0.08]
+                       text-[11px] font-bold text-white/35 hover:text-white/60
+                       hover:bg-white/[0.04] transition-all"
           >
             <RefreshCw size={12} /> Refresh
           </button>
         </motion.div>
 
-        {/* Hero */}
+        {/* ── Hero (always visible) ────────────────────────────────────────── */}
         <motion.div
           variants={I}
           className="relative overflow-hidden rounded-3xl border border-white/[0.07] p-6 md:p-7"
           style={{
-            background: `linear-gradient(135deg, ${examDef?.color ?? "#7C6FFF"}12, rgba(5,5,12,0))`,
+            background: `linear-gradient(135deg, ${accent}12, rgba(5,5,12,0))`,
           }}
         >
           <div
             className="absolute top-0 left-0 right-0 h-[1.5px]"
             style={{
-              background: `linear-gradient(90deg,transparent,${examDef?.color ?? "#7C6FFF"},transparent)`,
+              background: `linear-gradient(90deg,transparent,${accent},transparent)`,
             }}
           />
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
-            <SyllabusProgressRing
-              pct={pct}
-              color={examDef?.color ?? "#7C6FFF"}
-              size={108}
-            />
+            <SyllabusProgressRing pct={pct} color={accent} size={108} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-2xl leading-none">{examDef?.emoji}</span>
@@ -317,10 +334,11 @@ export default function SyllabusTracker() {
                 mastered={mastered}
                 xpEarned={xpEarned}
                 subjectCount={subjectData.length}
-                examColor={examDef?.color ?? "#7C6FFF"}
+                examColor={accent}
               />
             </div>
           </div>
+
           {total > 0 && done === 0 && (
             <div className="mt-5 px-4 py-3 rounded-2xl border border-white/[0.06] bg-white/[0.02]">
               <div className="flex items-center gap-2 justify-center">
@@ -334,7 +352,7 @@ export default function SyllabusTracker() {
           )}
         </motion.div>
 
-        {/* Exam Selector */}
+        {/* ── Exam selector (always visible) ──────────────────────────────── */}
         <motion.div
           variants={I}
           className="flex gap-1.5 overflow-x-auto scrollbar-none"
@@ -364,65 +382,116 @@ export default function SyllabusTracker() {
           })}
         </motion.div>
 
-        {/* Subject Grid */}
-        <motion.div variants={I}>
-          <p className="text-[11px] font-bold text-white/32 uppercase tracking-widest mb-3">
-            Subjects
-          </p>
-          {subjectData.length === 0 ? (
-            <div
-              className="flex flex-col items-center gap-2 py-12 rounded-2xl border border-white/[0.05]"
-              style={{ background: "#0A0A14" }}
-            >
-              <BookOpen size={28} className="text-white/18" />
-              <p className="text-[12px] text-white/28">No subjects found</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {subjectData.map((subject, i) => (
-                <SubjectCard
-                  key={subject.id}
-                  subject={subject}
-                  index={i}
-                  onOpen={handleSubjectOpen}
-                />
-              ))}
-            </div>
-          )}
+        {/* ── View toggle (Overview / Analytics) ──────────────────────────── */}
+        <motion.div variants={I} className="flex gap-1.5">
+          {VIEW_TABS.map((tab) => {
+            const active = view === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setView(tab.id)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border text-[12px] font-bold transition-all duration-200"
+                style={{
+                  background: active
+                    ? `${accent}14`
+                    : "rgba(255,255,255,0.025)",
+                  borderColor: active
+                    ? `${accent}42`
+                    : "rgba(255,255,255,0.07)",
+                  color: active ? accent : "rgba(255,255,255,0.35)",
+                  boxShadow: active ? `0 0 14px ${accent}12` : "none",
+                }}
+              >
+                <span className="text-sm leading-none">{tab.icon}</span>
+                {tab.label}
+              </button>
+            );
+          })}
         </motion.div>
 
-        {/* Recent Activity */}
-        <motion.div variants={I}>
-          <p className="text-[11px] font-bold text-white/32 uppercase tracking-widest mb-3">
-            Recent Activity
-          </p>
-          <div
-            className="rounded-2xl border border-white/[0.06] overflow-hidden"
-            style={{ background: "#0A0A14" }}
-          >
-            {activityLog.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-10 text-center px-4">
-                <BookOpen size={26} className="text-white/16" />
-                <p className="text-[12px] text-white/28">No activity yet</p>
-                <p className="text-[10px] text-white/18 max-w-xs leading-relaxed">
-                  Complete a topic from any subject to begin your syllabus
-                  journey.
-                </p>
+        {/* ── Overview view ────────────────────────────────────────────────── */}
+        {view === "overview" && (
+          <>
+            {/* Subject Grid */}
+            <motion.div variants={I}>
+              <p className="text-[11px] font-bold text-white/32 uppercase tracking-widest mb-3">
+                Subjects
+              </p>
+              {subjectData.length === 0 ? (
+                <div
+                  className="flex flex-col items-center gap-2 py-12 rounded-2xl border border-white/[0.05]"
+                  style={{ background: "#0A0A14" }}
+                >
+                  <BookOpen size={28} className="text-white/18" />
+                  <p className="text-[12px] text-white/28">No subjects found</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {subjectData.map((subject, i) => (
+                    <SubjectCard
+                      key={subject.id}
+                      subject={subject}
+                      index={i}
+                      onOpen={handleSubjectOpen}
+                    />
+                  ))}
+                </div>
+              )}
+            </motion.div>
+
+            {/* Recent Activity — sliced to 10 for display */}
+            <motion.div variants={I}>
+              <p className="text-[11px] font-bold text-white/32 uppercase tracking-widest mb-3">
+                Recent Activity
+              </p>
+              <div
+                className="rounded-2xl border border-white/[0.06] overflow-hidden"
+                style={{ background: "#0A0A14" }}
+              >
+                {activityLog.length === 0 ? (
+                  <div className="flex flex-col items-center gap-2 py-10 text-center px-4">
+                    <BookOpen size={26} className="text-white/16" />
+                    <p className="text-[12px] text-white/28">No activity yet</p>
+                    <p className="text-[10px] text-white/18 max-w-xs leading-relaxed">
+                      Complete a topic from any subject to begin your syllabus
+                      journey.
+                    </p>
+                  </div>
+                ) : (
+                  activityLog
+                    .slice(0, 10)
+                    .map((entry, i) => (
+                      <ActivityRow
+                        key={`${entry.timestamp ?? i}-${i}`}
+                        entry={entry}
+                        index={i}
+                      />
+                    ))
+                )}
               </div>
-            ) : (
-              activityLog.map((entry, i) => (
-                <ActivityRow
-                  key={`${entry.timestamp ?? i}-${i}`}
-                  entry={entry}
-                  index={i}
-                />
-              ))
-            )}
-          </div>
-        </motion.div>
+            </motion.div>
+          </>
+        )}
+
+        {/* ── Analytics view ───────────────────────────────────────────────── */}
+        {view === "analytics" && (
+          <motion.div
+            key="analytics"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            <SyllabusAnalyticsView
+              activeExam={activeExam}
+              examProgress={examProgress}
+              subjectProgress={subjectData}
+              activityLog={activityLog}
+            />
+          </motion.div>
+        )}
       </motion.div>
 
-      {/* Topic Panel */}
+      {/* ── Topic Panel overlay (overview only, always available) ────────── */}
       <AnimatePresence>
         {selectedSubject && (
           <>
