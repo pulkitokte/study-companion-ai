@@ -18,6 +18,7 @@ import TopicPanel from "../components/syllabus/TopicPanel.jsx";
 import SyllabusProgressRing from "../components/syllabus/SyllabusProgressRing.jsx";
 import SyllabusStats from "../components/syllabus/SyllabusStats.jsx";
 import SyllabusAnalyticsView from "../components/syllabus/analytics/SyllabusAnalyticsView.jsx";
+import RevisionView from "../components/syllabus/revision/RevisionView.jsx";
 
 // ─── ANIMATION VARIANTS ───────────────────────────────────────────────────────
 const C = { hidden: {}, visible: { transition: { staggerChildren: 0.07 } } };
@@ -30,10 +31,11 @@ const I = {
   },
 };
 
-// ─── VIEW TABS CONFIG ─────────────────────────────────────────────────────────
+// ─── VIEW TABS ────────────────────────────────────────────────────────────────
 const VIEW_TABS = [
   { id: "overview", icon: "📋", label: "Overview" },
   { id: "analytics", icon: "📊", label: "Analytics" },
+  { id: "revision", icon: "🔁", label: "Revision" },
 ];
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -110,7 +112,6 @@ function SubjectCard({ subject, index, onOpen }) {
           />
         </div>
       </div>
-
       <div className="h-1.5 bg-white/[0.05] rounded-full overflow-hidden mb-3">
         <motion.div
           className="h-full rounded-full"
@@ -126,7 +127,6 @@ function SubjectCard({ subject, index, onOpen }) {
           }}
         />
       </div>
-
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <CheckCircle2
@@ -216,7 +216,6 @@ export default function SyllabusTracker() {
   const navigate = useNavigate();
   const { show } = useToast();
 
-  // ── State ──────────────────────────────────────────────────────────────────
   const [activeExam, setActiveExamState] = useState(() =>
     syllabusService.getActiveExam(),
   );
@@ -230,9 +229,7 @@ export default function SyllabusTracker() {
   const examDef = useMemo(() => getExam(activeExam), [activeExam]);
   const accent = examDef?.color ?? "#7C6FFF";
 
-  // ── Data loading ───────────────────────────────────────────────────────────
-  // Fetch 90 entries so analytics charts have sufficient history.
-  // Overview activity feed slices to 10 at render time.
+  // Load 90 entries: analytics uses full set; overview slices to 10
   const loadData = useCallback(() => {
     setExamProgress(syllabusService.getExamProgress(activeExam));
     setSubjectData(syllabusService.getAllSubjectProgress(activeExam));
@@ -242,13 +239,10 @@ export default function SyllabusTracker() {
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  // Close topic panel when switching exams
   useEffect(() => {
     setSelectedSubject(null);
   }, [activeExam]);
 
-  // ── Handlers ───────────────────────────────────────────────────────────────
   const handleExamChange = useCallback((examId) => {
     syllabusService.setActiveExam(examId);
     setActiveExamState(examId);
@@ -266,7 +260,6 @@ export default function SyllabusTracker() {
     loadData();
   }, [loadData]);
 
-  // ── Derived values ─────────────────────────────────────────────────────────
   const pct = examProgress?.pct ?? 0;
   const done = examProgress?.done ?? 0;
   const total = examProgress?.total ?? 0;
@@ -281,7 +274,7 @@ export default function SyllabusTracker() {
         animate="visible"
         className="space-y-5 max-w-5xl mx-auto pb-16"
       >
-        {/* ── Page header ─────────────────────────────────────────────────── */}
+        {/* ── Page header ────────────────────────────────────────────────── */}
         <motion.div
           variants={I}
           className="flex items-center justify-between gap-3"
@@ -302,7 +295,7 @@ export default function SyllabusTracker() {
           </button>
         </motion.div>
 
-        {/* ── Hero (always visible) ────────────────────────────────────────── */}
+        {/* ── Hero (always visible) ───────────────────────────────────────── */}
         <motion.div
           variants={I}
           className="relative overflow-hidden rounded-3xl border border-white/[0.07] p-6 md:p-7"
@@ -352,7 +345,7 @@ export default function SyllabusTracker() {
           )}
         </motion.div>
 
-        {/* ── Exam selector (always visible) ──────────────────────────────── */}
+        {/* ── Exam selector (always visible) ─────────────────────────────── */}
         <motion.div
           variants={I}
           className="flex gap-1.5 overflow-x-auto scrollbar-none"
@@ -382,15 +375,18 @@ export default function SyllabusTracker() {
           })}
         </motion.div>
 
-        {/* ── View toggle (Overview / Analytics) ──────────────────────────── */}
-        <motion.div variants={I} className="flex gap-1.5">
+        {/* ── View toggle (always visible) ────────────────────────────────── */}
+        <motion.div
+          variants={I}
+          className="flex gap-1.5 overflow-x-auto scrollbar-none"
+        >
           {VIEW_TABS.map((tab) => {
             const active = view === tab.id;
             return (
               <button
                 key={tab.id}
                 onClick={() => setView(tab.id)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl border text-[12px] font-bold transition-all duration-200"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border shrink-0 text-[12px] font-bold transition-all duration-200"
                 style={{
                   background: active
                     ? `${accent}14`
@@ -409,10 +405,9 @@ export default function SyllabusTracker() {
           })}
         </motion.div>
 
-        {/* ── Overview view ────────────────────────────────────────────────── */}
+        {/* ── Overview ────────────────────────────────────────────────────── */}
         {view === "overview" && (
           <>
-            {/* Subject Grid */}
             <motion.div variants={I}>
               <p className="text-[11px] font-bold text-white/32 uppercase tracking-widest mb-3">
                 Subjects
@@ -439,7 +434,6 @@ export default function SyllabusTracker() {
               )}
             </motion.div>
 
-            {/* Recent Activity — sliced to 10 for display */}
             <motion.div variants={I}>
               <p className="text-[11px] font-bold text-white/32 uppercase tracking-widest mb-3">
                 Recent Activity
@@ -473,7 +467,7 @@ export default function SyllabusTracker() {
           </>
         )}
 
-        {/* ── Analytics view ───────────────────────────────────────────────── */}
+        {/* ── Analytics ───────────────────────────────────────────────────── */}
         {view === "analytics" && (
           <motion.div
             key="analytics"
@@ -489,9 +483,24 @@ export default function SyllabusTracker() {
             />
           </motion.div>
         )}
+
+        {/* ── Revision ────────────────────────────────────────────────────── */}
+        {view === "revision" && (
+          <motion.div
+            key="revision"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            <RevisionView
+              activeExam={activeExam}
+              onProgressChange={handleProgressChange}
+            />
+          </motion.div>
+        )}
       </motion.div>
 
-      {/* ── Topic Panel overlay (overview only, always available) ────────── */}
+      {/* ── Topic Panel overlay (available in all views) ─────────────────── */}
       <AnimatePresence>
         {selectedSubject && (
           <>
