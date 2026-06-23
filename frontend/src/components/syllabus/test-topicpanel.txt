@@ -1,8 +1,4 @@
-// ── PATCH 1 ───────────────────────────────────────────────────────────────────
-// In TopicRow, add highlightedTopicId to props and wire scroll + pulse.
-// Replace the existing TopicRow function with this version:
-
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   X,
@@ -12,6 +8,7 @@ import {
   AlertTriangle,
   BookOpen,
   Zap,
+  ChevronRight,
 } from "lucide-react";
 import syllabusService, {
   TOPIC_STATUS,
@@ -109,18 +106,8 @@ function getActions(status) {
 }
 
 // ─── TOPIC ROW ────────────────────────────────────────────────────────────────
-// ── PATCHED: accepts isHighlighted prop, scrolls into view and pulses ─────────
 
-function TopicRow({
-  topicDef,
-  progress,
-  subjectColor,
-  onAction,
-  isHighlighted,
-}) {
-  const rowRef = useRef(null);
-  const [pulse, setPulse] = useState(false);
-
+function TopicRow({ topicDef, progress, subjectColor, onAction }) {
   const status = progress?.status ?? TOPIC_STATUS.NOT_STARTED;
   const statusCfg =
     STATUS_CONFIG[status] ?? STATUS_CONFIG[TOPIC_STATUS.NOT_STARTED];
@@ -128,45 +115,20 @@ function TopicRow({
     DIFFICULTY_CONFIG[topicDef.difficulty] ?? DIFFICULTY_CONFIG.medium;
   const actions = getActions(status);
 
-  // Scroll into view and start pulse when this row is the search highlight
-  useEffect(() => {
-    if (!isHighlighted) return;
-    const el = rowRef.current;
-    if (el) {
-      // Small delay so the panel slide-in animation completes first
-      const t = setTimeout(() => {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        setPulse(true);
-      }, 380);
-      return () => clearTimeout(t);
-    }
-  }, [isHighlighted]);
-
-  // Pulse clears after 4 seconds (matches parent timeout)
-  useEffect(() => {
-    if (!pulse) return;
-    const t = setTimeout(() => setPulse(false), 4000);
-    return () => clearTimeout(t);
-  }, [pulse]);
-
   return (
     <div
-      ref={rowRef}
-      className="border-b border-white/[0.04] last:border-0 px-4 py-3.5 transition-all"
+      className="border-b border-white/[0.04] last:border-0 px-4 py-3.5 transition-colors hover:bg-white/[0.015]"
       style={{
-        background: pulse
-          ? "rgba(124,111,255,0.10)"
-          : status === TOPIC_STATUS.MASTERED
+        background:
+          status === TOPIC_STATUS.MASTERED
             ? "rgba(255,215,0,0.04)"
             : "transparent",
-        boxShadow: pulse ? "inset 0 0 0 1.5px rgba(124,111,255,0.35)" : "none",
-        borderRadius: pulse ? 12 : 0,
-        transition: "background 0.4s, box-shadow 0.4s",
       }}
     >
       {/* Top row: status + label + diff + xp */}
       <div className="flex items-start gap-3">
-        <div className="mt-0.5 shrink-0 w-3 h-3">
+        {/* Status dot */}
+        <div className="mt-0.5 shrink-0 relative w-3 h-3">
           <div
             className="w-3 h-3 rounded-full"
             style={{
@@ -177,6 +139,8 @@ function TopicRow({
             }}
           />
         </div>
+
+        {/* Topic label + badges */}
         <div className="flex-1 min-w-0">
           <p
             className={`text-[12px] font-semibold leading-snug ${
@@ -187,7 +151,9 @@ function TopicRow({
           >
             {topicDef.label}
           </p>
+
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            {/* Status badge */}
             <span
               className="text-[9px] font-bold px-1.5 py-0.5 rounded"
               style={{
@@ -197,6 +163,8 @@ function TopicRow({
             >
               {statusCfg.label}
             </span>
+
+            {/* Difficulty */}
             <span
               className="text-[9px] font-bold px-1.5 py-0.5 rounded border"
               style={{
@@ -207,6 +175,8 @@ function TopicRow({
             >
               {diffCfg.label}
             </span>
+
+            {/* XP available */}
             <div className="flex items-center gap-0.5">
               <Zap size={9} className="text-[#7C6FFF]/60" />
               <span className="text-[9px] text-[#7C6FFF]/60 font-bold">
@@ -243,6 +213,7 @@ function TopicRow({
         </div>
       )}
 
+      {/* Mastered — no actions */}
       {actions.length === 0 && status === TOPIC_STATUS.MASTERED && (
         <div className="flex items-center gap-1.5 mt-2 ml-6">
           <Star size={12} className="text-[#FFD700]" />
@@ -256,14 +227,12 @@ function TopicRow({
 }
 
 // ─── MAIN PANEL ───────────────────────────────────────────────────────────────
-// ── PATCHED: accepts optional highlightedTopicId prop ────────────────────────
 
 export default function TopicPanel({
   examId,
   subject,
   onClose,
   onProgressChange,
-  highlightedTopicId = null, // ← NEW optional prop
 }) {
   const { show } = useToast();
 
@@ -271,11 +240,13 @@ export default function TopicPanel({
   const [subjectProgress, setSubjectProgress] = useState(null);
   const [filter, setFilter] = useState("all");
 
+  // Static topic definitions from syllabusData
   const topicDefs = useMemo(
     () => getTopics(examId, subject.id),
     [examId, subject.id],
   );
 
+  // Load / refresh progress from service
   const loadProgress = useCallback(() => {
     const progresses = {};
     topicDefs.forEach((td) => {
@@ -293,11 +264,7 @@ export default function TopicPanel({
     loadProgress();
   }, [loadProgress]);
 
-  // When highlightedTopicId is set, force filter to 'all' so the topic is visible
-  useEffect(() => {
-    if (highlightedTopicId) setFilter("all");
-  }, [highlightedTopicId]);
-
+  // Per-filter topic counts for tab labels
   const filterCounts = useMemo(() => {
     const counts = {
       all: topicDefs.length,
@@ -317,6 +284,7 @@ export default function TopicPanel({
     return counts;
   }, [topicDefs, topicProgress]);
 
+  // Filtered list
   const filteredTopics = useMemo(() => {
     return topicDefs.filter((td) => {
       const s = topicProgress[td.id]?.status ?? TOPIC_STATUS.NOT_STARTED;
@@ -337,9 +305,11 @@ export default function TopicPanel({
     });
   }, [topicDefs, topicProgress, filter]);
 
+  // Topic action handler
   const handleAction = useCallback(
     (topicId, actionKey) => {
       let result;
+
       switch (actionKey) {
         case "complete":
           result = syllabusService.markComplete(examId, subject.id, topicId);
@@ -368,6 +338,7 @@ export default function TopicPanel({
       }
 
       const totalXP = (result.xpEarned ?? 0) + (result.bonusXP ?? 0);
+
       if (totalXP > 0) {
         if ((result.bonusXP ?? 0) > 0) {
           show({
@@ -415,19 +386,24 @@ export default function TopicPanel({
       exit={{ x: "100%" }}
       transition={{ type: "spring", stiffness: 300, damping: 32 }}
       className="fixed top-0 right-0 h-full w-full md:w-[480px] z-[300] flex flex-col border-l border-white/[0.08] shadow-2xl shadow-black/60"
-      style={{ background: "rgba(5,5,12,0.98)", backdropFilter: "blur(20px)" }}
+      style={{
+        background: "rgba(5,5,12,0.98)",
+        backdropFilter: "blur(20px)",
+      }}
     >
-      {/* Header */}
+      {/* ── Header ──────────────────────────────────────────────────────── */}
       <div
-        className="relative shrink-0 px-5 py-4 border-b border-white/[0.07]"
+        className="shrink-0 px-5 py-4 border-b border-white/[0.07]"
         style={{ background: `${subject.color}09` }}
       >
+        {/* Top glow accent */}
         <div
           className="absolute top-0 left-0 right-0 h-[1.5px]"
           style={{
             background: `linear-gradient(90deg,transparent,${subject.color},transparent)`,
           }}
         />
+
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="text-2xl leading-none shrink-0">
@@ -449,6 +425,8 @@ export default function TopicPanel({
             <X size={16} />
           </button>
         </div>
+
+        {/* Progress bar */}
         <div className="mt-3 h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
           <motion.div
             className="h-full rounded-full"
@@ -458,6 +436,8 @@ export default function TopicPanel({
             style={{ background: subject.color }}
           />
         </div>
+
+        {/* XP earned */}
         {xpEarned > 0 && (
           <div className="flex items-center gap-1 mt-2">
             <Zap size={11} className="text-[#7C6FFF]" />
@@ -468,7 +448,7 @@ export default function TopicPanel({
         )}
       </div>
 
-      {/* Filter Tabs */}
+      {/* ── Filter Tabs ─────────────────────────────────────────────────── */}
       <div className="shrink-0 px-4 py-2.5 border-b border-white/[0.05] flex gap-1 overflow-x-auto scrollbar-none">
         {FILTERS.map((f) => {
           const count = filterCounts[f.id] ?? 0;
@@ -489,18 +469,28 @@ export default function TopicPanel({
               }}
             >
               {f.label}
-              <span
-                className="ml-1.5 text-[9px]"
-                style={{ opacity: active ? 1 : 0.6 }}
-              >
-                {count}
-              </span>
+              {f.id !== "all" && count > 0 && (
+                <span
+                  className="ml-1.5 text-[9px]"
+                  style={{ opacity: active ? 1 : 0.6 }}
+                >
+                  {count}
+                </span>
+              )}
+              {f.id === "all" && (
+                <span
+                  className="ml-1.5 text-[9px]"
+                  style={{ opacity: active ? 1 : 0.6 }}
+                >
+                  {count}
+                </span>
+              )}
             </button>
           );
         })}
       </div>
 
-      {/* Topic List */}
+      {/* ── Topic List ──────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto scrollbar-none">
         {filteredTopics.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-16 text-center px-6">
@@ -521,13 +511,12 @@ export default function TopicPanel({
               progress={topicProgress[topicDef.id]}
               subjectColor={subject.color}
               onAction={handleAction}
-              isHighlighted={highlightedTopicId === topicDef.id}
             />
           ))
         )}
       </div>
 
-      {/* Footer */}
+      {/* ── Footer: quick summary ───────────────────────────────────────── */}
       <div
         className="shrink-0 px-5 py-3 border-t border-white/[0.07] flex items-center justify-between"
         style={{ background: "rgba(255,255,255,0.02)" }}
