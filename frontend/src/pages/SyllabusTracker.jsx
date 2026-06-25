@@ -22,6 +22,7 @@ import RevisionView from "../components/syllabus/revision/RevisionView.jsx";
 import SearchBar from "../components/syllabus/search/SearchBar.jsx";
 import SearchResults from "../components/syllabus/search/SearchResults.jsx";
 import ExamReadinessCard from "../components/syllabus/ExamReadinessCard.jsx";
+import ActivityHeatmap from "../components/syllabus/heatmap/ActivityHeatmap.jsx";
 import { buildSearchIndex, runSearch } from "../utils/searchUtils.js";
 import { getQuizHistory } from "../utils/quizStorage.js";
 
@@ -117,7 +118,6 @@ function SubjectCard({ subject, index, onOpen }) {
           />
         </div>
       </div>
-
       <div className="h-1.5 bg-white/[0.05] rounded-full overflow-hidden mb-3">
         <motion.div
           className="h-full rounded-full"
@@ -133,7 +133,6 @@ function SubjectCard({ subject, index, onOpen }) {
           }}
         />
       </div>
-
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <CheckCircle2
@@ -244,10 +243,10 @@ export default function SyllabusTracker() {
   const examDef = useMemo(() => getExam(activeExam), [activeExam]);
   const accent = examDef?.color ?? "#7C6FFF";
 
-  // ── Search index (built once from static data) ────────────────────────────
+  // ── Search index (built once) ─────────────────────────────────────────────
   const searchIndex = useMemo(() => buildSearchIndex(SYLLABUS_DATA), []);
 
-  // ── Quiz stats for readiness score (built once) ───────────────────────────
+  // ── Quiz stats for readiness score ────────────────────────────────────────
   const quizStats = useMemo(() => {
     try {
       const history = getQuizHistory() ?? [];
@@ -290,18 +289,20 @@ export default function SyllabusTracker() {
     return () => clearTimeout(searchTimerRef.current);
   }, [query, searchIndex]);
 
-  // ── Data loading ──────────────────────────────────────────────────────────
+  // ── Data loading — 90 entries covers both activity feed and heatmap ───────
+  // NOTE: ActivityHeatmap calls buildHeatmapData internally which handles
+  // the full 365-day window from whatever log slice is available.
   const loadData = useCallback(() => {
     setExamProgress(syllabusService.getExamProgress(activeExam));
     setSubjectData(syllabusService.getAllSubjectProgress(activeExam));
-    setActivityLog(syllabusService.getActivityLog(90));
+    setActivityLog(syllabusService.getActivityLog(500));
   }, [activeExam]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  // Close topic panel when exam switches
+  // Close panel when exam switches
   useEffect(() => {
     setSelectedSubject(null);
   }, [activeExam]);
@@ -337,31 +338,19 @@ export default function SyllabusTracker() {
 
   const handleResultSelect = useCallback(
     (result) => {
-      // 1. Switch exam if needed
       if (result.examId !== activeExam) {
         syllabusService.setActiveExam(result.examId);
         setActiveExamState(result.examId);
       }
-
-      // 2. Switch to overview so TopicPanel can render
       setView("overview");
-
-      // 3. Build subject object for TopicPanel from search result metadata
-      const subjectObj = {
+      setSelectedSubject({
         id: result.subjectId,
         label: result.subjectLabel,
         emoji: result.subjectEmoji,
         color: result.subjectColor,
-      };
-      setSelectedSubject(subjectObj);
-
-      // 4. Set highlighted topic — TopicPanel scrolls to it
+      });
       setHighlightedTopicId(result.topicId);
-
-      // 5. Auto-clear highlight after 4 seconds
       setTimeout(() => setHighlightedTopicId(null), 4000);
-
-      // 6. Clear search overlay
       handleSearchClear();
     },
     [activeExam, handleSearchClear],
@@ -439,7 +428,6 @@ export default function SyllabusTracker() {
               />
             </div>
           </div>
-
           {total > 0 && done === 0 && (
             <div className="mt-5 px-4 py-3 rounded-2xl border border-white/[0.06] bg-white/[0.02]">
               <div className="flex items-center gap-2 justify-center">
@@ -453,7 +441,7 @@ export default function SyllabusTracker() {
           )}
         </motion.div>
 
-        {/* ── Exam Readiness Card (below hero, above search) ──────────────── */}
+        {/* ── Exam Readiness Card ─────────────────────────────────────────── */}
         <motion.div variants={I}>
           <ExamReadinessCard
             examProgress={examProgress}
@@ -570,7 +558,7 @@ export default function SyllabusTracker() {
               )}
             </motion.div>
 
-            {/* Recent Activity — sliced to 10 for display */}
+            {/* Recent Activity */}
             <motion.div variants={I}>
               <p className="text-[11px] font-bold text-white/32 uppercase tracking-widest mb-3">
                 Recent Activity
@@ -600,6 +588,11 @@ export default function SyllabusTracker() {
                     ))
                 )}
               </div>
+            </motion.div>
+
+            {/* Activity Heatmap — below recent activity, overview only */}
+            <motion.div variants={I}>
+              <ActivityHeatmap activityLog={activityLog} examColor={accent} />
             </motion.div>
           </>
         )}
@@ -637,7 +630,7 @@ export default function SyllabusTracker() {
         )}
       </motion.div>
 
-      {/* ── Topic Panel overlay (available in all views) ─────────────────── */}
+      {/* ── Topic Panel overlay ─────────────────────────────────────────────── */}
       <AnimatePresence>
         {selectedSubject && (
           <>
