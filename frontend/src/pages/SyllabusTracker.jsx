@@ -21,7 +21,9 @@ import SyllabusAnalyticsView from "../components/syllabus/analytics/SyllabusAnal
 import RevisionView from "../components/syllabus/revision/RevisionView.jsx";
 import SearchBar from "../components/syllabus/search/SearchBar.jsx";
 import SearchResults from "../components/syllabus/search/SearchResults.jsx";
+import ExamReadinessCard from "../components/syllabus/ExamReadinessCard.jsx";
 import { buildSearchIndex, runSearch } from "../utils/searchUtils.js";
+import { getQuizHistory } from "../utils/quizStorage.js";
 
 // ─── ANIMATION VARIANTS ───────────────────────────────────────────────────────
 const C = { hidden: {}, visible: { transition: { staggerChildren: 0.07 } } };
@@ -115,6 +117,7 @@ function SubjectCard({ subject, index, onOpen }) {
           />
         </div>
       </div>
+
       <div className="h-1.5 bg-white/[0.05] rounded-full overflow-hidden mb-3">
         <motion.div
           className="h-full rounded-full"
@@ -130,6 +133,7 @@ function SubjectCard({ subject, index, onOpen }) {
           }}
         />
       </div>
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <CheckCircle2
@@ -240,15 +244,27 @@ export default function SyllabusTracker() {
   const examDef = useMemo(() => getExam(activeExam), [activeExam]);
   const accent = examDef?.color ?? "#7C6FFF";
 
-  // ── Search index (built once) ─────────────────────────────────────────────
+  // ── Search index (built once from static data) ────────────────────────────
   const searchIndex = useMemo(() => buildSearchIndex(SYLLABUS_DATA), []);
 
-  // ── Debounced search effect ───────────────────────────────────────────────
+  // ── Quiz stats for readiness score (built once) ───────────────────────────
+  const quizStats = useMemo(() => {
+    try {
+      const history = getQuizHistory() ?? [];
+      if (history.length === 0) return null;
+      const totalQuestions = history.reduce((s, q) => s + (q.total ?? 0), 0);
+      const correctAnswers = history.reduce((s, q) => s + (q.correct ?? 0), 0);
+      return { totalQuestions, correctAnswers };
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // ── Debounced search ──────────────────────────────────────────────────────
   const searchTimerRef = useRef(null);
 
   useEffect(() => {
     clearTimeout(searchTimerRef.current);
-
     const trimmed = query.trim();
 
     if (trimmed.length < 2) {
@@ -259,7 +275,6 @@ export default function SyllabusTracker() {
 
     searchTimerRef.current = setTimeout(() => {
       const raw = runSearch(trimmed, searchIndex, 20);
-      // Enrich with live progress
       const enriched = raw.map((r) => ({
         ...r,
         progress: syllabusService.getTopicProgress(
@@ -285,6 +300,8 @@ export default function SyllabusTracker() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Close topic panel when exam switches
   useEffect(() => {
     setSelectedSubject(null);
   }, [activeExam]);
@@ -318,15 +335,6 @@ export default function SyllabusTracker() {
     setSearchOpen(false);
   }, []);
 
-  /**
-   * handleResultSelect
-   * 1. Switch to the correct exam
-   * 2. Switch to overview so the panel is available
-   * 3. Find the subject object from current subjectData or re-fetch
-   * 4. Open TopicPanel for that subject
-   * 5. Set highlightedTopicId (auto-clears after 4s)
-   * 6. Clear search
-   */
   const handleResultSelect = useCallback(
     (result) => {
       // 1. Switch exam if needed
@@ -335,11 +343,10 @@ export default function SyllabusTracker() {
         setActiveExamState(result.examId);
       }
 
-      // 2. Switch to overview tab so TopicPanel can render
+      // 2. Switch to overview so TopicPanel can render
       setView("overview");
 
-      // 3. Build minimal subject object for TopicPanel
-      // Use result metadata (already contains full subject info from the index)
+      // 3. Build subject object for TopicPanel from search result metadata
       const subjectObj = {
         id: result.subjectId,
         label: result.subjectLabel,
@@ -389,7 +396,8 @@ export default function SyllabusTracker() {
           <button
             onClick={handleRefresh}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/[0.08]
-                       text-[11px] font-bold text-white/35 hover:text-white/60 hover:bg-white/[0.04] transition-all"
+                       text-[11px] font-bold text-white/35 hover:text-white/60
+                       hover:bg-white/[0.04] transition-all"
           >
             <RefreshCw size={12} /> Refresh
           </button>
@@ -431,6 +439,7 @@ export default function SyllabusTracker() {
               />
             </div>
           </div>
+
           {total > 0 && done === 0 && (
             <div className="mt-5 px-4 py-3 rounded-2xl border border-white/[0.06] bg-white/[0.02]">
               <div className="flex items-center gap-2 justify-center">
@@ -444,7 +453,16 @@ export default function SyllabusTracker() {
           )}
         </motion.div>
 
-        {/* ── Search bar (below hero, above exam tabs) ────────────────────── */}
+        {/* ── Exam Readiness Card (below hero, above search) ──────────────── */}
+        <motion.div variants={I}>
+          <ExamReadinessCard
+            examProgress={examProgress}
+            quizStats={quizStats}
+            examDef={examDef}
+          />
+        </motion.div>
+
+        {/* ── Search bar ──────────────────────────────────────────────────── */}
         <motion.div variants={I} className="relative">
           <SearchBar
             query={query}
@@ -525,6 +543,7 @@ export default function SyllabusTracker() {
         {/* ── Overview ────────────────────────────────────────────────────── */}
         {view === "overview" && (
           <>
+            {/* Subject grid */}
             <motion.div variants={I}>
               <p className="text-[11px] font-bold text-white/32 uppercase tracking-widest mb-3">
                 Subjects
@@ -551,6 +570,7 @@ export default function SyllabusTracker() {
               )}
             </motion.div>
 
+            {/* Recent Activity — sliced to 10 for display */}
             <motion.div variants={I}>
               <p className="text-[11px] font-bold text-white/32 uppercase tracking-widest mb-3">
                 Recent Activity
@@ -617,7 +637,7 @@ export default function SyllabusTracker() {
         )}
       </motion.div>
 
-      {/* ── Topic Panel overlay ─────────────────────────────────────────────── */}
+      {/* ── Topic Panel overlay (available in all views) ─────────────────── */}
       <AnimatePresence>
         {selectedSubject && (
           <>
