@@ -1,9 +1,10 @@
 // ── PATCH 1 ───────────────────────────────────────────────────────────────────
 // In TopicRow, add highlightedTopicId to props and wire scroll + pulse.
 // Replace the existing TopicRow function with this version:
+// Phase 29: Added Notes & Resources collapsible section per TopicRow.
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
   CheckCircle2,
@@ -12,12 +13,14 @@ import {
   AlertTriangle,
   BookOpen,
   Zap,
+  ChevronDown,
 } from "lucide-react";
 import syllabusService, {
   TOPIC_STATUS,
 } from "../../services/syllabusService.js";
 import { getTopics } from "../../data/syllabusData.js";
 import { useToast } from "../ui/Toast.jsx";
+import TopicNotesPanel from "./TopicNotesPanel.jsx";
 
 // ─── STATIC CONFIG ────────────────────────────────────────────────────────────
 
@@ -109,31 +112,43 @@ function getActions(status) {
 }
 
 // ─── TOPIC ROW ────────────────────────────────────────────────────────────────
-// ── PATCHED: accepts isHighlighted prop, scrolls into view and pulses ─────────
 
 function TopicRow({
+  examId,
+  subjectId,
   topicDef,
   progress,
   subjectColor,
   onAction,
+  onProgressRefresh,
   isHighlighted,
 }) {
   const rowRef = useRef(null);
   const [pulse, setPulse] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [localProgress, setLocalProgress] = useState(progress);
 
-  const status = progress?.status ?? TOPIC_STATUS.NOT_STARTED;
+  // Keep local progress in sync when parent provides updates
+  useEffect(() => {
+    setLocalProgress(progress);
+  }, [progress]);
+
+  const status = localProgress?.status ?? TOPIC_STATUS.NOT_STARTED;
   const statusCfg =
     STATUS_CONFIG[status] ?? STATUS_CONFIG[TOPIC_STATUS.NOT_STARTED];
   const diffCfg =
     DIFFICULTY_CONFIG[topicDef.difficulty] ?? DIFFICULTY_CONFIG.medium;
   const actions = getActions(status);
 
-  // Scroll into view and start pulse when this row is the search highlight
+  const hasNotes = !!localProgress?.notes?.trim();
+  const hasResources = (localProgress?.resources ?? []).length > 0;
+  const hasContent = hasNotes || hasResources;
+
+  // Scroll into view and pulse when highlighted by search
   useEffect(() => {
     if (!isHighlighted) return;
     const el = rowRef.current;
     if (el) {
-      // Small delay so the panel slide-in animation completes first
       const t = setTimeout(() => {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         setPulse(true);
@@ -142,17 +157,27 @@ function TopicRow({
     }
   }, [isHighlighted]);
 
-  // Pulse clears after 4 seconds (matches parent timeout)
   useEffect(() => {
     if (!pulse) return;
     const t = setTimeout(() => setPulse(false), 4000);
     return () => clearTimeout(t);
   }, [pulse]);
 
+  // Called by TopicNotesPanel after a save — re-read from service
+  const handleNotesUpdate = useCallback(() => {
+    const fresh = syllabusService.getTopicProgress(
+      examId,
+      subjectId,
+      topicDef.id,
+    );
+    setLocalProgress(fresh);
+    if (onProgressRefresh) onProgressRefresh();
+  }, [examId, subjectId, topicDef.id, onProgressRefresh]);
+
   return (
     <div
       ref={rowRef}
-      className="border-b border-white/[0.04] last:border-0 px-4 py-3.5 transition-all"
+      className="border-b border-white/[0.04] last:border-0 transition-all"
       style={{
         background: pulse
           ? "rgba(124,111,255,0.10)"
@@ -164,106 +189,180 @@ function TopicRow({
         transition: "background 0.4s, box-shadow 0.4s",
       }}
     >
-      {/* Top row: status + label + diff + xp */}
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 shrink-0 w-3 h-3">
-          <div
-            className="w-3 h-3 rounded-full"
-            style={{
-              background: statusCfg.color,
-              boxShadow: DONE_SET.has(status)
-                ? `0 0 5px ${statusCfg.color}60`
-                : "none",
-            }}
-          />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p
-            className={`text-[12px] font-semibold leading-snug ${
-              status === TOPIC_STATUS.MASTERED
-                ? "text-white/60 line-through"
-                : "text-white/78"
-            }`}
-          >
-            {topicDef.label}
-          </p>
-          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-            <span
-              className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+      {/* ── Main row content ── */}
+      <div className="px-4 py-3.5">
+        {/* Top row: status dot + label + diff + xp */}
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 shrink-0 w-3 h-3">
+            <div
+              className="w-3 h-3 rounded-full"
               style={{
-                color: statusCfg.color,
-                background: `${statusCfg.color}14`,
+                background: statusCfg.color,
+                boxShadow: DONE_SET.has(status)
+                  ? `0 0 5px ${statusCfg.color}60`
+                  : "none",
               }}
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p
+              className={`text-[12px] font-semibold leading-snug ${
+                status === TOPIC_STATUS.MASTERED
+                  ? "text-white/60 line-through"
+                  : "text-white/78"
+              }`}
             >
-              {statusCfg.label}
-            </span>
-            <span
-              className="text-[9px] font-bold px-1.5 py-0.5 rounded border"
-              style={{
-                color: diffCfg.color,
-                borderColor: `${diffCfg.color}28`,
-                background: `${diffCfg.color}08`,
-              }}
-            >
-              {diffCfg.label}
-            </span>
-            <div className="flex items-center gap-0.5">
-              <Zap size={9} className="text-[#7C6FFF]/60" />
-              <span className="text-[9px] text-[#7C6FFF]/60 font-bold">
-                {topicDef.xp} XP
+              {topicDef.label}
+            </p>
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              <span
+                className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                style={{
+                  color: statusCfg.color,
+                  background: `${statusCfg.color}14`,
+                }}
+              >
+                {statusCfg.label}
               </span>
+              <span
+                className="text-[9px] font-bold px-1.5 py-0.5 rounded border"
+                style={{
+                  color: diffCfg.color,
+                  borderColor: `${diffCfg.color}28`,
+                  background: `${diffCfg.color}08`,
+                }}
+              >
+                {diffCfg.label}
+              </span>
+              <div className="flex items-center gap-0.5">
+                <Zap size={9} className="text-[#7C6FFF]/60" />
+                <span className="text-[9px] text-[#7C6FFF]/60 font-bold">
+                  {topicDef.xp} XP
+                </span>
+              </div>
+              {/* Notes/resource indicator dot */}
+              {hasContent && (
+                <span
+                  className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                  style={{
+                    color: "#7C6FFF",
+                    background: "rgba(124,111,255,0.12)",
+                  }}
+                  title={`${hasNotes ? "Has notes" : ""}${hasNotes && hasResources ? " · " : ""}${hasResources ? `${(localProgress?.resources ?? []).length} resource${(localProgress?.resources ?? []).length !== 1 ? "s" : ""}` : ""}`}
+                >
+                  📝
+                </span>
+              )}
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Action buttons */}
-      {actions.length > 0 && (
-        <div className="flex items-center gap-2 mt-2.5 ml-6 flex-wrap">
-          {actions.map((action) => {
-            const Icon = action.icon;
-            return (
-              <motion.button
-                key={action.key}
-                whileHover={{ scale: 1.04 }}
-                whileTap={{ scale: 0.96 }}
-                onClick={() => onAction(topicDef.id, action.key)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-all"
+        {/* Action buttons */}
+        {actions.length > 0 && (
+          <div className="flex items-center gap-2 mt-2.5 ml-6 flex-wrap">
+            {actions.map((action) => {
+              const Icon = action.icon;
+              return (
+                <motion.button
+                  key={action.key}
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.96 }}
+                  onClick={() => onAction(topicDef.id, action.key)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-all"
+                  style={{
+                    color: action.color,
+                    borderColor: `${action.color}28`,
+                    background: `${action.color}0C`,
+                  }}
+                >
+                  <Icon size={11} />
+                  {action.label}
+                </motion.button>
+              );
+            })}
+          </div>
+        )}
+
+        {actions.length === 0 && status === TOPIC_STATUS.MASTERED && (
+          <div className="flex items-center gap-1.5 mt-2 ml-6">
+            <Star size={12} className="text-[#FFD700]" />
+            <span className="text-[10px] font-bold text-[#FFD700]/70">
+              Mastered
+            </span>
+          </div>
+        )}
+
+        {/* ── Notes & Resources toggle ── */}
+        <div className="mt-3 ml-6">
+          <button
+            onClick={() => setNotesOpen((v) => !v)}
+            className="flex items-center gap-1.5 text-[10px] font-bold transition-colors duration-150"
+            style={{
+              color: notesOpen ? "#7C6FFF" : "rgba(255,255,255,0.28)",
+            }}
+          >
+            <span>📝 Notes & Resources</span>
+            {hasContent && !notesOpen && (
+              <span
+                className="px-1 py-0.5 rounded text-[8px]"
                 style={{
-                  color: action.color,
-                  borderColor: `${action.color}28`,
-                  background: `${action.color}0C`,
+                  background: "rgba(124,111,255,0.15)",
+                  color: "#7C6FFF",
                 }}
               >
-                <Icon size={11} />
-                {action.label}
-              </motion.button>
-            );
-          })}
-        </div>
-      )}
+                {[
+                  hasNotes && "note",
+                  hasResources &&
+                    `${(localProgress?.resources ?? []).length} link${(localProgress?.resources ?? []).length !== 1 ? "s" : ""}`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            )}
+            <motion.span
+              animate={{ rotate: notesOpen ? 180 : 0 }}
+              transition={{ duration: 0.2 }}
+              className="ml-0.5"
+            >
+              <ChevronDown size={11} />
+            </motion.span>
+          </button>
 
-      {actions.length === 0 && status === TOPIC_STATUS.MASTERED && (
-        <div className="flex items-center gap-1.5 mt-2 ml-6">
-          <Star size={12} className="text-[#FFD700]" />
-          <span className="text-[10px] font-bold text-[#FFD700]/70">
-            Mastered
-          </span>
+          <AnimatePresence initial={false}>
+            {notesOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.22, ease: "easeInOut" }}
+                className="overflow-hidden"
+              >
+                <div className="pt-3">
+                  <TopicNotesPanel
+                    examId={examId}
+                    subjectId={subjectId}
+                    topicId={topicDef.id}
+                    progress={localProgress}
+                    onUpdate={handleNotesUpdate}
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
-      )}
+      </div>
     </div>
   );
 }
 
 // ─── MAIN PANEL ───────────────────────────────────────────────────────────────
-// ── PATCHED: accepts optional highlightedTopicId prop ────────────────────────
 
 export default function TopicPanel({
   examId,
   subject,
   onClose,
   onProgressChange,
-  highlightedTopicId = null, // ← NEW optional prop
+  highlightedTopicId = null,
 }) {
   const { show } = useToast();
 
@@ -517,10 +616,13 @@ export default function TopicPanel({
           filteredTopics.map((topicDef) => (
             <TopicRow
               key={topicDef.id}
+              examId={examId}
+              subjectId={subject.id}
               topicDef={topicDef}
               progress={topicProgress[topicDef.id]}
               subjectColor={subject.color}
               onAction={handleAction}
+              onProgressRefresh={loadProgress}
               isHighlighted={highlightedTopicId === topicDef.id}
             />
           ))

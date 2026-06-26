@@ -4,6 +4,8 @@
 //
 // globalStats.js reads NAMESPACES.syllabus DIRECTLY (not via this service)
 // to avoid the circular chain: syllabusService → useGlobalStats → globalStats → syllabusService
+//
+// Phase 29: Added updateTopicNotes, addTopicResource, removeTopicResource
 
 import StorageAdapter, { NAMESPACES } from "../lib/storageAdapter.js";
 import { enqueueSync } from "../lib/cloudSync.js";
@@ -29,6 +31,7 @@ const SUBJECT_COMPLETE_XP = 200;
 const SUBJECT_MASTERY_XP = 500;
 const EXAM_HALF_XP = 500;
 const EXAM_FULL_XP = 2000;
+const MAX_NOTES_LENGTH = 3000;
 
 export const TOPIC_STATUS = {
   NOT_STARTED: "not_started",
@@ -80,14 +83,23 @@ const EMPTY_TOPIC_PROGRESS = Object.freeze({
   revisedAt: null,
   masteredAt: null,
   xpEarned: 0,
+  // Phase 29 — notes & resources default (backward compat)
+  notes: "",
+  resources: [],
 });
 
 function _getTopicProgress(data, examId, subjectId, topicId) {
-  return (
-    data?.exams?.[examId]?.subjects?.[subjectId]?.topics?.[topicId] ?? {
-      ...EMPTY_TOPIC_PROGRESS,
-    }
-  );
+  const existing =
+    data?.exams?.[examId]?.subjects?.[subjectId]?.topics?.[topicId];
+
+  if (!existing) return { ...EMPTY_TOPIC_PROGRESS };
+
+  // Backward compat: guarantee Phase 29 fields always present
+  return {
+    ...existing,
+    notes: typeof existing.notes === "string" ? existing.notes : "",
+    resources: Array.isArray(existing.resources) ? existing.resources : [],
+  };
 }
 
 function _ensurePath(data, examId, subjectId) {
@@ -694,6 +706,93 @@ export const syllabusService = {
   resetAllProgress() {
     _write(_defaultData());
     notifyStatsUpdate();
+    return { ok: true };
+  },
+
+  // ── PHASE 29: NOTES & RESOURCES ──────────────────────────────────────────
+
+  /**
+   * Update notes for a topic.
+   * Preserves all existing progress fields (status, xp, timestamps, resources).
+   * Backward compatible — safe on topics with no prior notes field.
+   */
+  updateTopicNotes(examId, subjectId, topicId, notes) {
+    const data = _readOrInit();
+    _ensurePath(data, examId, subjectId);
+
+    const current = _getTopicProgress(data, examId, subjectId, topicId);
+
+    data.exams[examId].subjects[subjectId].topics[topicId] = {
+      ...current,
+      notes: typeof notes === "string" ? notes.slice(0, MAX_NOTES_LENGTH) : "",
+    };
+
+    _write(data);
+    enqueueSync("syllabus_notes_update", { examId, subjectId, topicId });
+    return { ok: true };
+  },
+
+  /**
+   * Add a resource to a topic.
+   * resource: { id, title, url }
+   * Preserves all existing progress fields.
+   */
+  addTopicResource(examId, subjectId, topicId, resource) {
+    if (!resource?.id || !resource?.title || !resource?.url) {
+      return { ok: false, error: "Invalid resource object." };
+    }
+
+    const data = _readOrInit();
+    _ensurePath(data, examId, subjectId);
+
+    const current = _getTopicProgress(data, examId, subjectId, topicId);
+    const resources = Array.isArray(current.resources) ? current.resources : [];
+
+    // Prevent duplicate ids
+    if (resources.find((r) => r.id === resource.id)) {
+      return { ok: true }; // idempotent
+    }
+
+    data.exams[examId].subjects[subjectId].topics[topicId] = {
+      ...current,
+      resources: [
+        ...resources,
+        { id: resource.id, title: resource.title, url: resource.url },
+      ],
+    };
+
+    _write(data);
+    enqueueSync("syllabus_resource_add", { examId, subjectId, topicId });
+    return { ok: true };
+  },
+
+  /**
+   * Remove a resource from a topic by resourceId.
+   * Preserves all existing progress fields.
+   */
+  removeTopicResource(examId, subjectId, topicId, resourceId) {
+    const data = _readOrInit();
+
+    // Safe no-op if path doesn't exist yet
+    if (!data?.exams?.[examId]?.subjects?.[subjectId]?.topics?.[topicId]) {
+      return { ok: true };
+    }
+
+    const current = _getTopicProgress(data, examId, subjectId, topicId);
+    const resources = Array.isArray(current.resources) ? current.resources : [];
+
+    data.exams[examId].subjects[subjectId].topics[topicId] = {
+      ...current,
+      resources: resources.filter((r) => r.id !== resourceId),
+    };
+
+    _write(data);
+    enqueueSync("syllabus_resource_remove", {
+      examId,
+      subjectId,
+      topicId,
+      resourceId,
+    });
     return { ok: true };
   },
 };
