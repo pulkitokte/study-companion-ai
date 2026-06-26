@@ -23,6 +23,7 @@ import SearchBar from "../components/syllabus/search/SearchBar.jsx";
 import SearchResults from "../components/syllabus/search/SearchResults.jsx";
 import ExamReadinessCard from "../components/syllabus/ExamReadinessCard.jsx";
 import ActivityHeatmap from "../components/syllabus/heatmap/ActivityHeatmap.jsx";
+import ExamCountdownCard from "../components/syllabus/ExamCountdownCard.jsx";
 import { buildSearchIndex, runSearch } from "../utils/searchUtils.js";
 import { getQuizHistory } from "../utils/quizStorage.js";
 
@@ -289,9 +290,7 @@ export default function SyllabusTracker() {
     return () => clearTimeout(searchTimerRef.current);
   }, [query, searchIndex]);
 
-  // ── Data loading — 90 entries covers both activity feed and heatmap ───────
-  // NOTE: ActivityHeatmap calls buildHeatmapData internally which handles
-  // the full 365-day window from whatever log slice is available.
+  // ── Data loading ──────────────────────────────────────────────────────────
   const loadData = useCallback(() => {
     setExamProgress(syllabusService.getExamProgress(activeExam));
     setSubjectData(syllabusService.getAllSubjectProgress(activeExam));
@@ -307,6 +306,15 @@ export default function SyllabusTracker() {
     setSelectedSubject(null);
   }, [activeExam]);
 
+  // ── Navigate-to-settings listener (from ExamCountdownCard CTA) ───────────
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.detail === "settings") navigate("/settings");
+    };
+    window.addEventListener("navigate", handler);
+    return () => window.removeEventListener("navigate", handler);
+  }, [navigate]);
+
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleExamChange = useCallback((examId) => {
     syllabusService.setActiveExam(examId);
@@ -321,6 +329,7 @@ export default function SyllabusTracker() {
   const handleSubjectOpen = useCallback((subject) => {
     setSelectedSubject(subject);
   }, []);
+
   const handleProgressChange = useCallback(() => {
     loadData();
   }, [loadData]);
@@ -439,6 +448,15 @@ export default function SyllabusTracker() {
               </div>
             </div>
           )}
+        </motion.div>
+
+        {/* ── Exam Countdown Card ─────────────────────────────────────────── */}
+        <motion.div variants={I}>
+          <ExamCountdownCard
+            examId={activeExam}
+            examDef={examDef}
+            examProgress={examProgress}
+          />
         </motion.div>
 
         {/* ── Exam Readiness Card ─────────────────────────────────────────── */}
@@ -590,7 +608,7 @@ export default function SyllabusTracker() {
               </div>
             </motion.div>
 
-            {/* Activity Heatmap — below recent activity, overview only */}
+            {/* Activity Heatmap */}
             <motion.div variants={I}>
               <ActivityHeatmap activityLog={activityLog} examColor={accent} />
             </motion.div>

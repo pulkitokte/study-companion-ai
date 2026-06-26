@@ -18,6 +18,8 @@ import {
   Globe,
   Server,
   Activity,
+  CalendarDays,
+  Save,
 } from "lucide-react";
 import { useSystem } from "../hooks/useSystem.js";
 import { useToast } from "../components/ui/Toast.jsx";
@@ -27,6 +29,8 @@ import { cacheClear } from "../lib/cacheManager.js";
 import { API_ROUTES } from "../lib/apiRoutes.js";
 import SystemConsole from "../components/settings/SystemConsole.jsx";
 import SyllabusSettingsSection from "../components/syllabus/SyllabusSettingsSection.jsx";
+import { getAllExams, getExam } from "../data/syllabusData.js";
+import { getExamDeadline, setExamDeadline } from "../utils/examPlanner.js";
 
 const C = { hidden: {}, visible: { transition: { staggerChildren: 0.06 } } };
 const I = {
@@ -106,6 +110,173 @@ function RouteGroup({ name, routes }) {
     </div>
   );
 }
+
+// ─── SYLLABUS DEADLINES SECTION ───────────────────────────────────────────────
+
+function ExamDeadlineRow({ exam }) {
+  const saved = getExamDeadline(exam.id);
+  const [date, setDate] = useState(saved ?? "");
+  const [status, setStatus] = useState("idle"); // idle | saved | error
+  const { show } = useToast();
+
+  const handleSave = () => {
+    if (!date) {
+      // Clear the deadline
+      const result = setExamDeadline(exam.id, null);
+      if (result.ok) {
+        setStatus("saved");
+        show({
+          type: "info",
+          title: `${exam.shortLabel} deadline cleared`,
+          duration: 2000,
+        });
+        setTimeout(() => setStatus("idle"), 2000);
+      }
+      return;
+    }
+
+    const result = setExamDeadline(exam.id, date);
+    if (result.ok) {
+      setStatus("saved");
+      show({
+        type: "mission",
+        title: `${exam.shortLabel} deadline saved!`,
+        message: date,
+        duration: 2500,
+      });
+      setTimeout(() => setStatus("idle"), 2000);
+    } else {
+      setStatus("error");
+      show({
+        type: "info",
+        title: "Invalid date",
+        message: result.error,
+        duration: 2500,
+      });
+      setTimeout(() => setStatus("idle"), 2000);
+    }
+  };
+
+  const formattedSaved = saved
+    ? new Date(saved + "T00:00:00").toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : null;
+
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3.5 border-b border-white/[0.04] last:border-0">
+      {/* Exam identity */}
+      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+        <span className="text-lg leading-none shrink-0">{exam.emoji}</span>
+        <div className="min-w-0">
+          <p className="text-[12px] font-bold text-white/80 leading-tight">
+            {exam.label}
+          </p>
+          {formattedSaved ? (
+            <p
+              className="text-[10px] mt-0.5"
+              style={{ color: `${exam.color}90` }}
+            >
+              📅 {formattedSaved}
+            </p>
+          ) : (
+            <p className="text-[10px] text-white/25 mt-0.5">No date set</p>
+          )}
+        </div>
+      </div>
+
+      {/* Date picker + save */}
+      <div className="flex items-center gap-2 shrink-0">
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          min={new Date().toISOString().slice(0, 10)}
+          className="px-2.5 py-1.5 rounded-xl border text-[11px] font-mono
+            bg-white/[0.04] border-white/[0.10] text-white/70
+            focus:outline-none focus:ring-1 focus:border-white/25
+            transition-colors duration-150"
+          style={{
+            colorScheme: "dark",
+            focusRingColor: exam.color,
+          }}
+        />
+        <motion.button
+          whileHover={{ scale: 1.04 }}
+          whileTap={{ scale: 0.96 }}
+          onClick={handleSave}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[11px] font-bold transition-all duration-150"
+          style={{
+            color:
+              status === "saved"
+                ? "#00FFC8"
+                : status === "error"
+                  ? "#FF6B2B"
+                  : exam.color,
+            borderColor:
+              status === "saved"
+                ? "rgba(0,255,200,0.30)"
+                : status === "error"
+                  ? "rgba(255,107,43,0.30)"
+                  : `${exam.color}35`,
+            background:
+              status === "saved"
+                ? "rgba(0,255,200,0.08)"
+                : status === "error"
+                  ? "rgba(255,107,43,0.08)"
+                  : `${exam.color}0C`,
+          }}
+        >
+          {status === "saved" ? (
+            <>
+              <CheckCircle2 size={11} /> Saved
+            </>
+          ) : status === "error" ? (
+            <>
+              <XCircle size={11} /> Error
+            </>
+          ) : (
+            <>
+              <Save size={11} /> Save
+            </>
+          )}
+        </motion.button>
+      </div>
+    </div>
+  );
+}
+
+function SyllabusDeadlinesSection() {
+  const allExams = useMemo(() => getAllExams(), []);
+
+  return (
+    <motion.div variants={I}>
+      <div className="flex items-center gap-2 mb-3">
+        <CalendarDays size={14} className="text-[#7C6FFF]" />
+        <h3 className="text-[13px] font-bold text-white">Syllabus Deadlines</h3>
+      </div>
+      <div
+        className="rounded-2xl border border-white/[0.06] overflow-hidden"
+        style={{ background: "#0A0A14" }}
+      >
+        {/* Section header */}
+        <div className="px-4 py-3 border-b border-white/[0.05] bg-white/[0.02]">
+          <p className="text-[11px] text-white/35 leading-relaxed">
+            Set exam dates to enable the countdown timer and daily topic targets
+            on your Syllabus Tracker.
+          </p>
+        </div>
+        {allExams.map((exam) => (
+          <ExamDeadlineRow key={exam.id} exam={exam} />
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 export default function System() {
   const navigate = useNavigate();
@@ -586,8 +757,13 @@ export default function System() {
           </p>
         </div>
       </motion.div>
+
+      {/* Syllabus Deadlines */}
+      <SyllabusDeadlinesSection />
+
       {/* Syllabus Settings */}
       <SyllabusSettingsSection />
+
       {/* Console overlay */}
       <SystemConsole open={consoleOpen} onClose={() => setConsoleOpen(false)} />
     </motion.div>
