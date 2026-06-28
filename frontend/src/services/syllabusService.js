@@ -6,6 +6,10 @@
 // to avoid the circular chain: syllabusService → useGlobalStats → globalStats → syllabusService
 //
 // Phase 29: Added updateTopicNotes, addTopicResource, removeTopicResource
+// Phase 31: Integrated spacedRevisionEngine — revisionMeta auto-scheduled on
+//           markComplete / markRevised / markMastered.
+//           New public methods: getTodayRevisionQueue, getOverdueRevisions,
+//           getRevisionStats, markTopicRevised.
 
 import StorageAdapter, { NAMESPACES } from "../lib/storageAdapter.js";
 import { enqueueSync } from "../lib/cloudSync.js";
@@ -20,6 +24,11 @@ import {
   getSubjectMaxXP,
   getExamMaxXP,
 } from "../data/syllabusData.js";
+import {
+  scheduleNextRevision,
+  buildTodayRevisionQueue as _engineBuildQueue,
+  getRevisionStats as _engineGetRevisionStats,
+} from "../utils/spacedRevisionEngine.js";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
@@ -32,6 +41,13 @@ const SUBJECT_MASTERY_XP = 500;
 const EXAM_HALF_XP = 500;
 const EXAM_FULL_XP = 2000;
 const MAX_NOTES_LENGTH = 3000;
+
+// Statuses that trigger a spaced-repetition schedule update
+const REVISION_SCHEDULE_STATUSES = new Set([
+  "completed",
+  "revised",
+  "mastered",
+]);
 
 export const TOPIC_STATUS = {
   NOT_STARTED: "not_started",
@@ -83,9 +99,11 @@ const EMPTY_TOPIC_PROGRESS = Object.freeze({
   revisedAt: null,
   masteredAt: null,
   xpEarned: 0,
-  // Phase 29 — notes & resources default (backward compat)
+  // Phase 29 — notes & resources
   notes: "",
   resources: [],
+  // Phase 31 — spaced repetition meta (null = not yet scheduled)
+  revisionMeta: null,
 });
 
 function _getTopicProgress(data, examId, subjectId, topicId) {
@@ -94,11 +112,13 @@ function _getTopicProgress(data, examId, subjectId, topicId) {
 
   if (!existing) return { ...EMPTY_TOPIC_PROGRESS };
 
-  // Backward compat: guarantee Phase 29 fields always present
+  // Backward compat: guarantee Phase 29 + Phase 31 fields always present
   return {
     ...existing,
     notes: typeof existing.notes === "string" ? existing.notes : "",
     resources: Array.isArray(existing.resources) ? existing.resources : [],
+    // revisionMeta may be absent on old records — null is safe default
+    revisionMeta: existing.revisionMeta ?? null,
   };
 }
 
@@ -388,6 +408,38 @@ function _makeId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+// ─── PRIVATE: PHASE 31 — SPACED REPETITION SCHEDULING ───────────────────────
+
+/**
+ * _applyRevisionSchedule
+ *
+ * Called inside updateTopicStatus whenever the new status is one that
+ * warrants scheduling (completed, revised, mastered).
+ *
+ * Merges the result of scheduleNextRevision() into the topic entry
+ * WITHOUT overwriting any other field (status, xpEarned, timestamps,
+ * notes, resources — all preserved).
+ *
+ * Safe on existing topics that have no revisionMeta (first-time scheduling).
+ * Safe on topics from old localStorage data (backward compatible).
+ *
+ * @param {object} topicEntry   — the already-mutated topic object (has new status)
+ * @param {string} difficulty   — 'easy' | 'medium' | 'hard'
+ * @returns {object}            topicEntry with revisionMeta merged in
+ */
+function _applyRevisionSchedule(topicEntry, difficulty) {
+  try {
+    const updatedMeta = scheduleNextRevision(topicEntry, difficulty);
+    return {
+      ...topicEntry,
+      revisionMeta: updatedMeta,
+    };
+  } catch {
+    // Never let spaced repetition scheduling crash a topic mutation
+    return topicEntry;
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC SERVICE API
 // ─────────────────────────────────────────────────────────────────────────────
@@ -459,6 +511,14 @@ export const syllabusService = {
 
   // ── MUTATIONS ─────────────────────────────────────────────────────────────
 
+  /**
+   * updateTopicStatus
+   *
+   * Core mutation method. Handles all topic state transitions,
+   * awards XP, checks milestones and achievements, and — Phase 31 —
+   * automatically schedules or advances the spaced-repetition revision
+   * whenever the topic reaches completed, revised, or mastered.
+   */
   updateTopicStatus(examId, subjectId, topicId, newStatus) {
     const topicDef = getTopic(examId, subjectId, topicId);
     if (!topicDef) {
@@ -492,17 +552,32 @@ export const syllabusService = {
 
     const xpEarned = _transitionXP(topicDef, oldStatus, newStatus);
 
-    const updatedTopic = {
+    // Build the updated topic entry preserving ALL existing fields
+    // (notes, resources, revisionMeta from previous phases)
+    let updatedTopic = {
       ...current,
       status: newStatus,
       xpEarned: (current.xpEarned ?? 0) + xpEarned,
     };
+
+    // Set timestamps only on first transition to that status
     if (newStatus === TOPIC_STATUS.COMPLETED && !current.completedAt)
       updatedTopic.completedAt = now;
     if (newStatus === TOPIC_STATUS.REVISED && !current.revisedAt)
       updatedTopic.revisedAt = now;
     if (newStatus === TOPIC_STATUS.MASTERED && !current.masteredAt)
       updatedTopic.masteredAt = now;
+
+    // ── Phase 31: Spaced Repetition Integration ───────────────────────────
+    // Automatically schedule (or advance) the revision when the topic
+    // reaches a status that warrants it.
+    // _applyRevisionSchedule reads the current revisionMeta.level and
+    // advances it by one step, computing the next due date.
+    // Safe on topics with no prior revisionMeta (first-time scheduling).
+    if (REVISION_SCHEDULE_STATUSES.has(newStatus)) {
+      updatedTopic = _applyRevisionSchedule(updatedTopic, topicDef.difficulty);
+    }
+    // ─────────────────────────────────────────────────────────────────────
 
     data.exams[examId].subjects[subjectId].topics[topicId] = updatedTopic;
 
@@ -662,6 +737,7 @@ export const syllabusService = {
     return null;
   },
 
+  // Existing Phase 25 revision queue (status-based, unchanged)
   getRevisionQueue(examId = null, limit = 10) {
     const activeExam = examId ?? this.getActiveExam();
     const data = _readOrInit();
@@ -713,8 +789,8 @@ export const syllabusService = {
 
   /**
    * Update notes for a topic.
-   * Preserves all existing progress fields (status, xp, timestamps, resources).
-   * Backward compatible — safe on topics with no prior notes field.
+   * Preserves all existing progress fields (status, xp, timestamps, resources,
+   * revisionMeta). Backward compatible — safe on topics with no prior notes field.
    */
   updateTopicNotes(examId, subjectId, topicId, notes) {
     const data = _readOrInit();
@@ -735,7 +811,7 @@ export const syllabusService = {
   /**
    * Add a resource to a topic.
    * resource: { id, title, url }
-   * Preserves all existing progress fields.
+   * Preserves all existing progress fields including revisionMeta.
    */
   addTopicResource(examId, subjectId, topicId, resource) {
     if (!resource?.id || !resource?.title || !resource?.url) {
@@ -768,7 +844,7 @@ export const syllabusService = {
 
   /**
    * Remove a resource from a topic by resourceId.
-   * Preserves all existing progress fields.
+   * Preserves all existing progress fields including revisionMeta.
    */
   removeTopicResource(examId, subjectId, topicId, resourceId) {
     const data = _readOrInit();
@@ -794,6 +870,113 @@ export const syllabusService = {
       resourceId,
     });
     return { ok: true };
+  },
+
+  // ── PHASE 31: SPACED REPETITION PUBLIC API ────────────────────────────────
+
+  /**
+   * getTodayRevisionQueue
+   *
+   * Returns all topics that are due for spaced-repetition revision today
+   * or are overdue, sorted by priority score descending.
+   *
+   * Uses buildTodayRevisionQueue from spacedRevisionEngine — no logic
+   * is duplicated here; this method is the single entry point for UI layers.
+   *
+   * @param {string|null} examId  defaults to activeExam
+   * @returns {Array} queue items sorted by priorityScore DESC
+   *   [{ examId, subjectId, topicId, topicName, revisionLevel,
+   *      overdueDays, priorityScore, nextRevisionDate,
+   *      subjectLabel, subjectEmoji, subjectColor,
+   *      difficulty, xp, progress, isOverdue, isGraduated }]
+   */
+  getTodayRevisionQueue(examId = null) {
+    try {
+      const activeExam = examId ?? this.getActiveExam();
+      const subjectData = this.getAllSubjectProgress(activeExam);
+      const progressData = _readOrInit();
+      return _engineBuildQueue(subjectData, progressData, activeExam);
+    } catch {
+      return [];
+    }
+  },
+
+  /**
+   * getOverdueRevisions
+   *
+   * Returns only topics that are STRICTLY overdue (past their
+   * nextRevisionDate by at least 1 full day), sorted by priority.
+   *
+   * @param {string|null} examId
+   * @returns {Array}  subset of getTodayRevisionQueue where isOverdue === true
+   */
+  getOverdueRevisions(examId = null) {
+    try {
+      const queue = this.getTodayRevisionQueue(examId);
+      return queue.filter((item) => item.isOverdue === true);
+    } catch {
+      return [];
+    }
+  },
+
+  /**
+   * getRevisionStats
+   *
+   * Returns aggregate spaced-repetition statistics for the active exam.
+   * Used by AI Coach recommendations and dashboard widgets.
+   *
+   * @param {string|null} examId
+   * @returns {{
+   *   totalScheduled,   topics that have ever been given a revision date
+   *   dueToday,         topics due today (overdue + exactly-due)
+   *   overdueCount,     topics strictly past their due date
+   *   graduatedCount,   topics that completed all 5 revision levels
+   *   nextDueDate,      YYYY-MM-DD of the soonest upcoming revision (or null)
+   * }}
+   */
+  getRevisionStats(examId = null) {
+    try {
+      const activeExam = examId ?? this.getActiveExam();
+      const subjectData = this.getAllSubjectProgress(activeExam);
+      const progressData = _readOrInit();
+      return _engineGetRevisionStats(subjectData, progressData, activeExam);
+    } catch {
+      return {
+        totalScheduled: 0,
+        dueToday: 0,
+        overdueCount: 0,
+        graduatedCount: 0,
+        nextDueDate: null,
+      };
+    }
+  },
+
+  /**
+   * markTopicRevised
+   *
+   * Semantic alias for markRevised specifically intended for the
+   * Spaced Repetition UI (RevisionView / today's queue).
+   *
+   * Calling this:
+   *   1. Transitions topic status to REVISED (same as markRevised)
+   *   2. Awards TOPIC_REVISION_XP
+   *   3. Automatically advances revisionMeta.level and schedules
+   *      the next revision date (via updateTopicStatus → _applyRevisionSchedule)
+   *
+   * Idempotent if topic is already REVISED (no XP re-awarded).
+   *
+   * @param {string} examId
+   * @param {string} subjectId
+   * @param {string} topicId
+   * @returns {{ ok, xpEarned, bonusXP, newStatus, oldStatus, newAchievements }}
+   */
+  markTopicRevised(examId, subjectId, topicId) {
+    return this.updateTopicStatus(
+      examId,
+      subjectId,
+      topicId,
+      TOPIC_STATUS.REVISED,
+    );
   },
 };
 

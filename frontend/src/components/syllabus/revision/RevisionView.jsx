@@ -1,44 +1,45 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { BookOpen } from "lucide-react";
+import { BookOpen, Trophy, Calendar, AlertTriangle, Clock } from "lucide-react";
 import syllabusService from "../../../services/syllabusService.js";
-import { buildRevisionQueue } from "../../../utils/revisionEngine.js";
 import { useToast } from "../../ui/Toast.jsx";
-import RevisionStats from "./RevisionStats.jsx";
 import RevisionQueue from "./RevisionQueue.jsx";
 
 /**
- * RevisionView
+ * RevisionView — Phase 31 update
  *
- * Container for the Smart Revision System.
- * Owns all service calls and queue state.
- * Passes pre-built data down to stateless child components.
+ * Now powered by syllabusService.getTodayRevisionQueue() and
+ * syllabusService.getRevisionStats() from the spaced repetition engine.
+ *
+ * Replaces the old buildRevisionQueue() from revisionEngine.js.
+ * All existing toast / XP / achievement logic is preserved.
  *
  * Props:
- *   activeExam       {string}   Current exam id
- *   onProgressChange {function} Called after any topic action so SyllabusTracker
- *                               can reload its hero stats without a full remount
+ *   activeExam       {string}   current exam id
+ *   onProgressChange {function} called after any mutation to reload parent stats
  */
 export default function RevisionView({ activeExam, onProgressChange }) {
   const { show } = useToast();
 
-  const [queue, setQueue] = useState(null); // null = not yet loaded
+  const [queue, setQueue] = useState(null); // flat sorted array
+  const [revisionStats, setRevisionStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // ── Load / rebuild queue ──────────────────────────────────────────────────
-  const buildQueue = useCallback(() => {
+  // ── Load spaced-repetition queue + stats ─────────────────────────────────
+  const loadRevisionData = useCallback(() => {
     try {
-      const subjects = syllabusService.getAllSubjectProgress(activeExam);
-      const progressData = syllabusService.getSyllabusData();
-      const built = buildRevisionQueue(subjects, progressData, activeExam);
-      setQueue(built);
+      const todayQueue = syllabusService.getTodayRevisionQueue(activeExam);
+      const stats = syllabusService.getRevisionStats(activeExam);
+      setQueue(Array.isArray(todayQueue) ? todayQueue : []);
+      setRevisionStats(stats);
     } catch {
-      setQueue({
-        overdue: [],
-        dueToday: [],
-        upcoming: [],
-        totalDue: 0,
-        totalOverdue: 0,
+      setQueue([]);
+      setRevisionStats({
+        totalScheduled: 0,
+        dueToday: 0,
+        overdueCount: 0,
+        graduatedCount: 0,
+        nextDueDate: null,
       });
     } finally {
       setLoading(false);
@@ -47,8 +48,8 @@ export default function RevisionView({ activeExam, onProgressChange }) {
 
   useEffect(() => {
     setLoading(true);
-    buildQueue();
-  }, [buildQueue]);
+    loadRevisionData();
+  }, [loadRevisionData]);
 
   // ── Action handler ────────────────────────────────────────────────────────
   const handleAction = useCallback(
@@ -56,7 +57,8 @@ export default function RevisionView({ activeExam, onProgressChange }) {
       let result;
 
       if (actionType === "revise") {
-        result = syllabusService.markRevised(
+        // Phase 31: use markTopicRevised — advances spaced repetition level
+        result = syllabusService.markTopicRevised(
           item.examId,
           item.subjectId,
           item.topicId,
@@ -120,16 +122,14 @@ export default function RevisionView({ activeExam, onProgressChange }) {
         });
       }
 
-      // Rebuild queue so the acted-on card disappears from the list
-      buildQueue();
-
-      // Refresh hero stats + subject grid on the parent page
+      // Rebuild queue so acted-on card disappears; refresh parent hero stats
+      loadRevisionData();
       onProgressChange?.();
     },
-    [buildQueue, onProgressChange, show],
+    [loadRevisionData, onProgressChange, show],
   );
 
-  // ── Loading state ─────────────────────────────────────────────────────────
+  // ── Loading spinner ───────────────────────────────────────────────────────
   if (loading || queue === null) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -142,10 +142,11 @@ export default function RevisionView({ activeExam, onProgressChange }) {
     );
   }
 
-  // ── Fully caught up empty state ────────────────────────────────────────────
-  const allEmpty = queue.totalDue === 0 && (queue.upcoming?.length ?? 0) === 0;
+  const nothingScheduled = (revisionStats?.totalScheduled ?? 0) === 0;
+  const nothingDueToday = queue.length === 0;
 
-  if (allEmpty) {
+  // ── No topics ever scheduled yet ──────────────────────────────────────────
+  if (nothingScheduled) {
     return (
       <motion.div
         initial={{ opacity: 0, y: 8 }}
@@ -155,30 +156,68 @@ export default function RevisionView({ activeExam, onProgressChange }) {
         <div
           className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl"
           style={{
-            background: "rgba(0,255,200,0.08)",
-            border: "1px solid rgba(0,255,200,0.18)",
+            background: "rgba(124,111,255,0.08)",
+            border: "1px solid rgba(124,111,255,0.18)",
           }}
         >
-          🎉
+          📅
         </div>
         <div>
           <p className="text-[15px] font-black text-white mb-2">
-            You're fully caught up!
+            No revisions scheduled yet
           </p>
           <p className="text-[12px] text-white/35 max-w-xs leading-relaxed">
-            Complete more topics to generate future revisions. Topics appear
-            here after their scheduled review interval.
+            Complete topics from the Overview tab. Each completed topic
+            automatically enters the spaced repetition schedule.
           </p>
         </div>
         <div className="flex items-center gap-2 mt-2 text-[11px] text-white/22">
           <BookOpen size={13} className="text-white/20" />
-          Head to the Overview tab to mark more topics done.
+          Head to Overview to start tracking topics.
         </div>
       </motion.div>
     );
   }
 
-  // ── Main view ──────────────────────────────────────────────────────────────
+  // ── Spaced repetition stats helper ───────────────────────────────────────
+  const nextDueDateLabel = revisionStats?.nextDueDate
+    ? new Date(revisionStats.nextDueDate + "T00:00:00").toLocaleDateString(
+        "en-US",
+        { month: "short", day: "numeric" },
+      )
+    : "—";
+
+  const STAT_PILLS = [
+    {
+      icon: AlertTriangle,
+      label: "Overdue",
+      value: revisionStats?.overdueCount ?? 0,
+      color: "#FF6B2B",
+      sub: "need attention",
+    },
+    {
+      icon: Clock,
+      label: "Due Today",
+      value: revisionStats?.dueToday ?? 0,
+      color: "#FFB347",
+      sub: "scheduled today",
+    },
+    {
+      icon: Trophy,
+      label: "Graduated",
+      value: revisionStats?.graduatedCount ?? 0,
+      color: "#FFD700",
+      sub: "fully revised",
+    },
+    {
+      icon: Calendar,
+      label: "Next Due",
+      value: nextDueDateLabel,
+      color: "#4FC3F7",
+      sub: "upcoming",
+    },
+  ];
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -186,8 +225,85 @@ export default function RevisionView({ activeExam, onProgressChange }) {
       transition={{ duration: 0.25 }}
       className="space-y-5"
     >
-      <RevisionStats queue={queue} />
-      <RevisionQueue queue={queue} onAction={handleAction} />
+      {/* ── Spaced repetition stats row ─────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {STAT_PILLS.map(({ icon: Icon, label, value, color, sub }) => {
+          const isEmpty = value === 0 || value === "—";
+          return (
+            <div
+              key={label}
+              className="rounded-2xl border p-4 transition-all"
+              style={{
+                background: isEmpty ? "#0A0A14" : `${color}0C`,
+                borderColor: isEmpty ? "rgba(255,255,255,0.06)" : `${color}28`,
+              }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Icon
+                  size={12}
+                  style={{
+                    color: isEmpty ? "rgba(255,255,255,0.22)" : color,
+                  }}
+                />
+                <span className="text-[9px] font-black text-white/30 uppercase tracking-widest">
+                  {label}
+                </span>
+              </div>
+              <p
+                className="text-[22px] font-black leading-none mb-1"
+                style={{ color: isEmpty ? "rgba(255,255,255,0.20)" : color }}
+              >
+                {value}
+              </p>
+              <p className="text-[9px] text-white/22">{sub}</p>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── All caught up for today ──────────────────────────────────────── */}
+      {nothingDueToday ? (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col items-center gap-4 py-10 text-center px-4
+                     rounded-2xl border border-white/[0.06]"
+          style={{ background: "rgba(0,255,200,0.03)" }}
+        >
+          <div
+            className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl"
+            style={{
+              background: "rgba(0,255,200,0.08)",
+              border: "1px solid rgba(0,255,200,0.18)",
+            }}
+          >
+            🎉
+          </div>
+          <div>
+            <p className="text-[14px] font-black text-white mb-1.5">
+              No revisions due today
+            </p>
+            <p className="text-[11px] text-white/35 max-w-xs leading-relaxed">
+              {revisionStats?.nextDueDate
+                ? `Your next scheduled revision is on ${new Date(
+                    revisionStats.nextDueDate + "T00:00:00",
+                  ).toLocaleDateString("en-US", {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                  })}.`
+                : "Keep completing topics to grow your revision pipeline."}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-[10px] text-white/20">
+            <BookOpen size={12} className="text-white/18" />
+            Continue to Overview to mark more topics done.
+          </div>
+        </motion.div>
+      ) : (
+        /* ── Today's revision queue ─────────────────────────────────────── */
+        <RevisionQueue queue={queue} onAction={handleAction} />
+      )}
     </motion.div>
   );
 }

@@ -1,7 +1,22 @@
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { RotateCcw, CheckCircle2, CalendarClock } from "lucide-react";
+import { RotateCcw, CheckCircle2, Flame } from "lucide-react";
 import RevisionCard from "./RevisionCard.jsx";
+
+/**
+ * RevisionQueue — Phase 31 update
+ *
+ * Now receives a FLAT sorted array from syllabusService.getTodayRevisionQueue()
+ * (items already sorted by priorityScore DESC).
+ *
+ * Internally splits into two tabs:
+ *   Overdue   — item.isOverdue === true
+ *   Due Today — item.isOverdue === false
+ *
+ * Props:
+ *   queue    {Array}    flat sorted array from getTodayRevisionQueue()
+ *   onAction {function} (item, actionType) => void
+ */
 
 // ─── TAB CONFIG ───────────────────────────────────────────────────────────────
 
@@ -9,29 +24,18 @@ const TABS = [
   {
     id: "overdue",
     label: "Overdue",
-    icon: RotateCcw,
+    icon: Flame,
     color: "#FF6B2B",
-    queueKey: "overdue",
     emptyTitle: "No overdue topics",
-    emptySub: "All overdue topics have been revised.",
+    emptySub: "All overdue revisions are cleared — great work!",
   },
   {
     id: "dueToday",
     label: "Due Today",
-    icon: CheckCircle2,
+    icon: RotateCcw,
     color: "#FFB347",
-    queueKey: "dueToday",
-    emptyTitle: "You're all caught up",
-    emptySub: "Nothing is due today — check back tomorrow.",
-  },
-  {
-    id: "upcoming",
-    label: "Upcoming",
-    icon: CalendarClock,
-    color: "#4FC3F7",
-    queueKey: "upcoming",
-    emptyTitle: "No upcoming reviews",
-    emptySub: "Complete more topics to build your revision schedule.",
+    emptyTitle: "Nothing due today",
+    emptySub: "You're caught up — check back tomorrow.",
   },
 ];
 
@@ -56,32 +60,46 @@ function EmptyState({ title, sub, color }) {
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
-/**
- * @param {{ queue, onAction }} props
- * queue — output of revisionEngine.buildRevisionQueue()
- * onAction(item, actionType) — forwarded from RevisionView
- */
 export default function RevisionQueue({ queue, onAction }) {
-  const q = queue ?? {};
+  // Split flat array into categorised groups.
+  // Both groups are already sorted by priorityScore DESC from the engine.
+  const overdue = useMemo(
+    () => (queue ?? []).filter((i) => i.isOverdue === true),
+    [queue],
+  );
+  const dueToday = useMemo(
+    () => (queue ?? []).filter((i) => i.isOverdue === false),
+    [queue],
+  );
 
   // Default to the first non-empty tab, preferring overdue
   const defaultTab = useMemo(() => {
-    if ((q.overdue?.length ?? 0) > 0) return "overdue";
-    if ((q.dueToday?.length ?? 0) > 0) return "dueToday";
-    return "upcoming";
-  }, [q.overdue?.length, q.dueToday?.length]);
+    if (overdue.length > 0) return "overdue";
+    if (dueToday.length > 0) return "dueToday";
+    return "overdue";
+  }, [overdue.length, dueToday.length]);
 
   const [activeTab, setActiveTab] = useState(defaultTab);
 
+  // Resolve active list
+  const activeList = activeTab === "overdue" ? overdue : dueToday;
   const activeCfg = TABS.find((t) => t.id === activeTab) ?? TABS[0];
-  const activeList = q[activeCfg.queueKey] ?? [];
+
+  // Count map for tab badges
+  const counts = { overdue: overdue.length, dueToday: dueToday.length };
 
   return (
     <div>
-      {/* ── Inner tab bar ─────────────────────────────────────────────── */}
+      {/* ── Summary line ──────────────────────────────────────────────── */}
+      <p className="text-[10px] font-black text-white/28 uppercase tracking-widest mb-3">
+        {(queue ?? []).length} topic{(queue ?? []).length !== 1 ? "s" : ""} to
+        review — sorted by priority
+      </p>
+
+      {/* ── Tab bar ───────────────────────────────────────────────────── */}
       <div className="flex gap-1.5 mb-4 overflow-x-auto scrollbar-none">
         {TABS.map((tab) => {
-          const count = (q[tab.queueKey] ?? []).length;
+          const count = counts[tab.id] ?? 0;
           const active = activeTab === tab.id;
           const Icon = tab.icon;
 
@@ -89,7 +107,8 @@ export default function RevisionQueue({ queue, onAction }) {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className="shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-xl border text-[11px] font-bold transition-all duration-150"
+              className="shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-xl border
+                         text-[11px] font-bold transition-all duration-150"
               style={{
                 background: active
                   ? `${tab.color}14`
@@ -102,9 +121,9 @@ export default function RevisionQueue({ queue, onAction }) {
             >
               <Icon size={12} />
               {tab.label}
-              {/* Count badge */}
               <span
-                className="ml-0.5 min-w-[18px] px-1 py-0.5 rounded-md text-[9px] font-black text-center leading-none"
+                className="ml-0.5 min-w-[18px] px-1 py-0.5 rounded-md
+                           text-[9px] font-black text-center leading-none"
                 style={{
                   background: active
                     ? `${tab.color}22`
