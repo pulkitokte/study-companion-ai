@@ -16,14 +16,23 @@ function generateRecommendations() {
   const stats = aggregateAll();
 
   const all = [
-    // Quiz / study coaching
+    // Phase 31: Spaced revision recommendations — highest priority slot.
+    // Overdue revisions (priority ~95) and due-today (priority ~88) must
+    // surface above all other recommendations when present.
+    ...safeCall(() => StudyCoachAgent.getSpacedRevisionRecommendations()),
+
+    // Quiz / study coaching (priority 80–50)
     ...safeCall(() => StudyCoachAgent.getRecommendations(stats)),
-    // Syllabus coverage awareness (Batch 9)
+
+    // Syllabus coverage awareness — Batch 9 (priority 83–60)
     ...safeCall(() => StudyCoachAgent.getSyllabusRecommendations()),
+
     // Planner-based nudges
     ...safeCall(() => PlannerAgent.getRecommendations()),
+
     // Focus pattern insights
     ...safeCall(() => FocusAgent.getRecommendations()),
+
     // Progress / rank milestones
     ...safeCall(() => ProgressAgent.getRecommendations(stats)),
   ];
