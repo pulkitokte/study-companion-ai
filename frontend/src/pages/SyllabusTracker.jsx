@@ -24,6 +24,7 @@ import SearchResults from "../components/syllabus/search/SearchResults.jsx";
 import ExamReadinessCard from "../components/syllabus/ExamReadinessCard.jsx";
 import ActivityHeatmap from "../components/syllabus/heatmap/ActivityHeatmap.jsx";
 import ExamCountdownCard from "../components/syllabus/ExamCountdownCard.jsx";
+import GapAnalysisView from "../components/syllabus/gap-analysis/GapAnalysisView.jsx";
 import { buildSearchIndex, runSearch } from "../utils/searchUtils.js";
 import { getQuizHistory } from "../utils/quizStorage.js";
 
@@ -40,9 +41,10 @@ const I = {
 
 // ─── VIEW TABS ────────────────────────────────────────────────────────────────
 const VIEW_TABS = [
-  { id: "overview", icon: "📋", label: "Overview" },
-  { id: "analytics", icon: "📊", label: "Analytics" },
-  { id: "revision", icon: "🔁", label: "Revision" },
+  { id: "overview",     icon: "📋", label: "Overview"     },
+  { id: "analytics",   icon: "📊", label: "Analytics"    },
+  { id: "revision",    icon: "🔁", label: "Revision"     },
+  { id: "gap-analysis", icon: "🔍", label: "Gap Analysis" },
 ];
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -59,22 +61,22 @@ function fmtAgo(iso) {
 }
 
 const ACTION_META = {
-  topic_completed: { label: "Completed", color: "#00FFC8" },
-  topic_revised: { label: "Revised", color: "#7C6FFF" },
-  topic_mastered: { label: "Mastered", color: "#FFD700" },
-  topic_revision_needed: { label: "Flagged", color: "#FF6B2B" },
-  subject_completed: { label: "Subject Complete", color: "#00FFC8" },
-  subject_mastered: { label: "Subject Mastered", color: "#FFD700" },
-  exam_half_complete: { label: "50% Milestone", color: "#FF6B2B" },
-  exam_full_complete: { label: "Exam Complete", color: "#FFD700" },
+  topic_completed:       { label: "Completed",        color: "#00FFC8" },
+  topic_revised:         { label: "Revised",          color: "#7C6FFF" },
+  topic_mastered:        { label: "Mastered",         color: "#FFD700" },
+  topic_revision_needed: { label: "Flagged",          color: "#FF6B2B" },
+  subject_completed:     { label: "Subject Complete", color: "#00FFC8" },
+  subject_mastered:      { label: "Subject Mastered", color: "#FFD700" },
+  exam_half_complete:    { label: "50% Milestone",    color: "#FF6B2B" },
+  exam_full_complete:    { label: "Exam Complete",    color: "#FFD700" },
 };
 
 // ─── SUBJECT CARD ─────────────────────────────────────────────────────────────
 function SubjectCard({ subject, index, onOpen }) {
   const progress = subject.progress ?? {};
-  const pct = progress.pct ?? 0;
-  const done = progress.done ?? 0;
-  const total = progress.total ?? 0;
+  const pct      = progress.pct      ?? 0;
+  const done     = progress.done     ?? 0;
+  const total    = progress.total    ?? 0;
   const mastered = progress.mastered ?? 0;
   const xpEarned = progress.xpEarned ?? 0;
 
@@ -224,41 +226,44 @@ export default function SyllabusTracker() {
   const { show } = useToast();
 
   // ── Core state ────────────────────────────────────────────────────────────
-  const [activeExam, setActiveExamState] = useState(() =>
-    syllabusService.getActiveExam(),
-  );
-  const [examProgress, setExamProgress] = useState(null);
-  const [subjectData, setSubjectData] = useState([]);
-  const [activityLog, setActivityLog] = useState([]);
-  const [selectedSubject, setSelectedSubject] = useState(null);
-  const [view, setView] = useState("overview");
+  const [activeExam,         setActiveExamState]    = useState(() => syllabusService.getActiveExam());
+  const [examProgress,       setExamProgress]       = useState(null);
+  const [subjectData,        setSubjectData]        = useState([]);
+  const [activityLog,        setActivityLog]        = useState([]);
+  const [selectedSubject,    setSelectedSubject]    = useState(null);
+  const [view,               setView]               = useState("overview");
   const [highlightedTopicId, setHighlightedTopicId] = useState(null);
 
   // ── Search state ──────────────────────────────────────────────────────────
-  const [query, setQuery] = useState("");
+  const [query,         setQuery]         = useState("");
   const [searchResults, setSearchResults] = useState([]);
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchOpen,    setSearchOpen]    = useState(false);
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const allExams = useMemo(() => getAllExams(), []);
-  const examDef = useMemo(() => getExam(activeExam), [activeExam]);
-  const accent = examDef?.color ?? "#7C6FFF";
+  const examDef  = useMemo(() => getExam(activeExam), [activeExam]);
+  const accent   = examDef?.color ?? "#7C6FFF";
 
   // ── Search index (built once) ─────────────────────────────────────────────
   const searchIndex = useMemo(() => buildSearchIndex(SYLLABUS_DATA), []);
 
+  // ── Quiz history — shared by readiness score AND gap analysis ─────────────
+  const quizHistory = useMemo(() => {
+    try { return getQuizHistory() ?? [] }
+    catch { return [] }
+  }, []);
+
   // ── Quiz stats for readiness score ────────────────────────────────────────
   const quizStats = useMemo(() => {
     try {
-      const history = getQuizHistory() ?? [];
-      if (history.length === 0) return null;
-      const totalQuestions = history.reduce((s, q) => s + (q.total ?? 0), 0);
-      const correctAnswers = history.reduce((s, q) => s + (q.correct ?? 0), 0);
+      if (quizHistory.length === 0) return null;
+      const totalQuestions = quizHistory.reduce((s, q) => s + (q.total   ?? 0), 0);
+      const correctAnswers = quizHistory.reduce((s, q) => s + (q.correct ?? 0), 0);
       return { totalQuestions, correctAnswers };
     } catch {
       return null;
     }
-  }, []);
+  }, [quizHistory]);
 
   // ── Debounced search ──────────────────────────────────────────────────────
   const searchTimerRef = useRef(null);
@@ -274,14 +279,10 @@ export default function SyllabusTracker() {
     }
 
     searchTimerRef.current = setTimeout(() => {
-      const raw = runSearch(trimmed, searchIndex, 20);
+      const raw      = runSearch(trimmed, searchIndex, 20);
       const enriched = raw.map((r) => ({
         ...r,
-        progress: syllabusService.getTopicProgress(
-          r.examId,
-          r.subjectId,
-          r.topicId,
-        ),
+        progress: syllabusService.getTopicProgress(r.examId, r.subjectId, r.topicId),
       }));
       setSearchResults(enriched);
       setSearchOpen(true);
@@ -297,20 +298,14 @@ export default function SyllabusTracker() {
     setActivityLog(syllabusService.getActivityLog(500));
   }, [activeExam]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useEffect(() => { loadData(); }, [loadData]);
 
   // Close panel when exam switches
-  useEffect(() => {
-    setSelectedSubject(null);
-  }, [activeExam]);
+  useEffect(() => { setSelectedSubject(null); }, [activeExam]);
 
-  // ── Navigate-to-settings listener (from ExamCountdownCard CTA) ───────────
+  // Navigate-to-settings listener (from ExamCountdownCard CTA)
   useEffect(() => {
-    const handler = (e) => {
-      if (e.detail === "settings") navigate("/settings");
-    };
+    const handler = (e) => { if (e.detail === "settings") navigate("/settings"); };
     window.addEventListener("navigate", handler);
     return () => window.removeEventListener("navigate", handler);
   }, [navigate]);
@@ -326,13 +321,8 @@ export default function SyllabusTracker() {
     show({ type: "info", title: "Refreshed", duration: 1500 });
   };
 
-  const handleSubjectOpen = useCallback((subject) => {
-    setSelectedSubject(subject);
-  }, []);
-
-  const handleProgressChange = useCallback(() => {
-    loadData();
-  }, [loadData]);
+  const handleSubjectOpen    = useCallback((subject) => { setSelectedSubject(subject); }, []);
+  const handleProgressChange = useCallback(() => { loadData(); }, [loadData]);
 
   // ── Search handlers ───────────────────────────────────────────────────────
   const handleSearchClear = useCallback(() => {
@@ -341,9 +331,7 @@ export default function SyllabusTracker() {
     setSearchOpen(false);
   }, []);
 
-  const handleSearchClose = useCallback(() => {
-    setSearchOpen(false);
-  }, []);
+  const handleSearchClose = useCallback(() => { setSearchOpen(false); }, []);
 
   const handleResultSelect = useCallback(
     (result) => {
@@ -353,7 +341,7 @@ export default function SyllabusTracker() {
       }
       setView("overview");
       setSelectedSubject({
-        id: result.subjectId,
+        id:    result.subjectId,
         label: result.subjectLabel,
         emoji: result.subjectEmoji,
         color: result.subjectColor,
@@ -366,9 +354,9 @@ export default function SyllabusTracker() {
   );
 
   // ── Derived display values ────────────────────────────────────────────────
-  const pct = examProgress?.pct ?? 0;
-  const done = examProgress?.done ?? 0;
-  const total = examProgress?.total ?? 0;
+  const pct      = examProgress?.pct      ?? 0;
+  const done     = examProgress?.done     ?? 0;
+  const total    = examProgress?.total    ?? 0;
   const mastered = examProgress?.mastered ?? 0;
   const xpEarned = examProgress?.xpEarned ?? 0;
 
@@ -381,10 +369,7 @@ export default function SyllabusTracker() {
         className="space-y-5 max-w-5xl mx-auto pb-16"
       >
         {/* ── Page header ────────────────────────────────────────────────── */}
-        <motion.div
-          variants={I}
-          className="flex items-center justify-between gap-3"
-        >
+        <motion.div variants={I} className="flex items-center justify-between gap-3">
           <button
             onClick={() => navigate("/dashboard")}
             className="flex items-center gap-2 text-[12px] text-white/30 hover:text-white/65 transition-colors"
@@ -405,15 +390,11 @@ export default function SyllabusTracker() {
         <motion.div
           variants={I}
           className="relative overflow-hidden rounded-3xl border border-white/[0.07] p-6 md:p-7"
-          style={{
-            background: `linear-gradient(135deg, ${accent}12, rgba(5,5,12,0))`,
-          }}
+          style={{ background: `linear-gradient(135deg, ${accent}12, rgba(5,5,12,0))` }}
         >
           <div
             className="absolute top-0 left-0 right-0 h-[1.5px]"
-            style={{
-              background: `linear-gradient(90deg,transparent,${accent},transparent)`,
-            }}
+            style={{ background: `linear-gradient(90deg,transparent,${accent},transparent)` }}
           />
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
             <SyllabusProgressRing pct={pct} color={accent} size={108} />
@@ -442,8 +423,7 @@ export default function SyllabusTracker() {
               <div className="flex items-center gap-2 justify-center">
                 <BookOpen size={14} className="text-white/30 shrink-0" />
                 <p className="text-[12px] text-white/38 text-center">
-                  Select a subject below and mark your first topic complete to
-                  start tracking.
+                  Select a subject below and mark your first topic complete to start tracking.
                 </p>
               </div>
             </div>
@@ -487,10 +467,7 @@ export default function SyllabusTracker() {
         </motion.div>
 
         {/* ── Exam selector (always visible) ─────────────────────────────── */}
-        <motion.div
-          variants={I}
-          className="flex gap-1.5 overflow-x-auto scrollbar-none"
-        >
+        <motion.div variants={I} className="flex gap-1.5 overflow-x-auto scrollbar-none">
           {allExams.map((exam) => {
             const active = exam.id === activeExam;
             return (
@@ -499,14 +476,10 @@ export default function SyllabusTracker() {
                 onClick={() => handleExamChange(exam.id)}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl border shrink-0 text-[12px] font-bold transition-all duration-200"
                 style={{
-                  background: active
-                    ? `${exam.color}14`
-                    : "rgba(255,255,255,0.025)",
-                  borderColor: active
-                    ? `${exam.color}42`
-                    : "rgba(255,255,255,0.07)",
-                  color: active ? exam.color : "rgba(255,255,255,0.35)",
-                  boxShadow: active ? `0 0 14px ${exam.color}12` : "none",
+                  background:  active ? `${exam.color}14` : "rgba(255,255,255,0.025)",
+                  borderColor: active ? `${exam.color}42` : "rgba(255,255,255,0.07)",
+                  color:       active ? exam.color         : "rgba(255,255,255,0.35)",
+                  boxShadow:   active ? `0 0 14px ${exam.color}12` : "none",
                 }}
               >
                 <span className="text-base leading-none">{exam.emoji}</span>
@@ -517,10 +490,7 @@ export default function SyllabusTracker() {
         </motion.div>
 
         {/* ── View toggle (always visible) ────────────────────────────────── */}
-        <motion.div
-          variants={I}
-          className="flex gap-1.5 overflow-x-auto scrollbar-none"
-        >
+        <motion.div variants={I} className="flex gap-1.5 overflow-x-auto scrollbar-none">
           {VIEW_TABS.map((tab) => {
             const active = view === tab.id;
             return (
@@ -529,14 +499,10 @@ export default function SyllabusTracker() {
                 onClick={() => setView(tab.id)}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl border shrink-0 text-[12px] font-bold transition-all duration-200"
                 style={{
-                  background: active
-                    ? `${accent}14`
-                    : "rgba(255,255,255,0.025)",
-                  borderColor: active
-                    ? `${accent}42`
-                    : "rgba(255,255,255,0.07)",
-                  color: active ? accent : "rgba(255,255,255,0.35)",
-                  boxShadow: active ? `0 0 14px ${accent}12` : "none",
+                  background:  active ? `${accent}14` : "rgba(255,255,255,0.025)",
+                  borderColor: active ? `${accent}42` : "rgba(255,255,255,0.07)",
+                  color:       active ? accent          : "rgba(255,255,255,0.35)",
+                  boxShadow:   active ? `0 0 14px ${accent}12` : "none",
                 }}
               >
                 <span className="text-sm leading-none">{tab.icon}</span>
@@ -590,20 +556,17 @@ export default function SyllabusTracker() {
                     <BookOpen size={26} className="text-white/16" />
                     <p className="text-[12px] text-white/28">No activity yet</p>
                     <p className="text-[10px] text-white/18 max-w-xs leading-relaxed">
-                      Complete a topic from any subject to begin your syllabus
-                      journey.
+                      Complete a topic from any subject to begin your syllabus journey.
                     </p>
                   </div>
                 ) : (
-                  activityLog
-                    .slice(0, 10)
-                    .map((entry, i) => (
-                      <ActivityRow
-                        key={`${entry.timestamp ?? i}-${i}`}
-                        entry={entry}
-                        index={i}
-                      />
-                    ))
+                  activityLog.slice(0, 10).map((entry, i) => (
+                    <ActivityRow
+                      key={`${entry.timestamp ?? i}-${i}`}
+                      entry={entry}
+                      index={i}
+                    />
+                  ))
                 )}
               </div>
             </motion.div>
@@ -643,6 +606,22 @@ export default function SyllabusTracker() {
             <RevisionView
               activeExam={activeExam}
               onProgressChange={handleProgressChange}
+            />
+          </motion.div>
+        )}
+
+        {/* ── Gap Analysis ────────────────────────────────────────────────── */}
+        {view === "gap-analysis" && (
+          <motion.div
+            key="gap-analysis"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            <GapAnalysisView
+              subjectProgress={subjectData}
+              quizHistory={quizHistory}
+              examColor={accent}
             />
           </motion.div>
         )}
