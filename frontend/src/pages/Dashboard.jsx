@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -24,6 +24,7 @@ import MobileDashboard from "../components/mobile/MobileDashboard.jsx";
 import SystemStatus from "../components/ui/SystemStatus.jsx";
 import LiveActivityFeed from "../components/dashboard/LiveActivityFeed.jsx";
 import SmartRecommendations from "../components/dashboard/SmartRecommendations.jsx";
+import CommandCenter from "../components/dashboard/CommandCenter.jsx";
 import {
   getFirstName,
   getSmartRecommendations,
@@ -36,6 +37,8 @@ import {
 } from "../utils/progressStorage.js";
 import { CATEGORIES } from "../data/mockQuizData.js";
 import SyllabusDashboardWidget from "../components/syllabus/SyllabusDashboardWidget.jsx";
+import syllabusService from "../services/syllabusService.js";
+import { getRankedRecommendations } from "../lib/recommendationEngine.js";
 
 // Return mobile layout on small screens
 function DashboardContent() {
@@ -145,6 +148,73 @@ function DesktopDashboard() {
     },
   ];
 
+  // ── Phase 34: Command Center data ─────────────────────────────────────────
+  // All service calls isolated here in DesktopDashboard.
+  // CommandCenter itself receives only plain data props.
+
+  const activeExam = useMemo(() => {
+    try {
+      return syllabusService.getActiveExam();
+    } catch {
+      return "upsc";
+    }
+  }, []);
+
+  const commandExamProgress = useMemo(() => {
+    try {
+      return syllabusService.getExamProgress(activeExam);
+    } catch {
+      return null;
+    }
+  }, [activeExam]);
+
+  const commandSubjectProgress = useMemo(() => {
+    try {
+      return syllabusService.getAllSubjectProgress(activeExam) ?? [];
+    } catch {
+      return [];
+    }
+  }, [activeExam]);
+
+  const commandActivityLog = useMemo(() => {
+    try {
+      return syllabusService.getActivityLog(500) ?? [];
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const commandRevisionQueue = useMemo(() => {
+    try {
+      return syllabusService.getTodayRevisionQueue(activeExam) ?? [];
+    } catch {
+      return [];
+    }
+  }, [activeExam]);
+
+  const commandRecommendations = useMemo(() => {
+    try {
+      return getRankedRecommendations() ?? [];
+    } catch {
+      return [];
+    }
+  }, []);
+
+  // ── Phase 34: Command Center navigation handler ────────────────────────────
+  // Tab is stored in sessionStorage so SyllabusTracker can restore it on mount.
+  // For non-syllabus paths, navigate directly.
+  const handleCommandNavigate = useCallback(
+    (path, tab) => {
+      if (path === "/syllabus" && tab) {
+        try {
+          sessionStorage.setItem("studymind_syllabus_initial_tab", tab);
+        } catch {}
+      }
+      navigate(path);
+    },
+    [navigate],
+  );
+
   return (
     <motion.div
       variants={C}
@@ -152,7 +222,7 @@ function DesktopDashboard() {
       animate="visible"
       className="space-y-6 max-w-[1200px] mx-auto"
     >
-      {/* Hero */}
+      {/* ── Hero ──────────────────────────────────────────────────────────── */}
       <motion.div
         variants={I}
         className="relative overflow-hidden rounded-2xl border border-white/[0.06] p-6 md:p-8"
@@ -264,7 +334,19 @@ function DesktopDashboard() {
         </div>
       </motion.div>
 
-      {/* Stat cards */}
+      {/* ── Phase 34: Command Center (directly below hero) ─────────────────── */}
+      <motion.div variants={I}>
+        <CommandCenter
+          revisionQueue={commandRevisionQueue}
+          recommendations={commandRecommendations}
+          subjectProgress={commandSubjectProgress}
+          examProgress={commandExamProgress}
+          activityLog={commandActivityLog}
+          onNavigate={handleCommandNavigate}
+        />
+      </motion.div>
+
+      {/* ── Stat cards ────────────────────────────────────────────────────── */}
       <motion.div
         variants={I}
         className="grid grid-cols-2 lg:grid-cols-4 gap-3"
@@ -307,17 +389,18 @@ function DesktopDashboard() {
           );
         })}
       </motion.div>
-      {/* Syllabus Dashboard Widget */}
+
+      {/* ── Syllabus Dashboard Widget ─────────────────────────────────────── */}
       <motion.div variants={I}>
         <SyllabusDashboardWidget />
       </motion.div>
 
-      {/* Smart recommendations */}
+      {/* ── Smart recommendations ─────────────────────────────────────────── */}
       <motion.div variants={I}>
         <SmartRecommendations />
       </motion.div>
 
-      {/* Main grid */}
+      {/* ── Main grid ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-6">
         <div className="space-y-5">
           {/* Daily missions */}
