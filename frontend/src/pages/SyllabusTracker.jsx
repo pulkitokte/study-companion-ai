@@ -49,6 +49,20 @@ const VIEW_TABS = [
   { id: "recommendations", icon: "🌟", label: "Recommendations" },
 ];
 
+// ─── VALID TAB IDS FOR SESSION STORAGE RESTORATION ───────────────────────────
+// CHANGE 1 — added by Phase 34 Batch C
+// Includes all rendered tab ids plus any extra ids the Dashboard Command Center
+// may store. Unknown values are ignored and fall back to "overview".
+const VALID_TAB_IDS = new Set([
+  "overview",
+  "analytics",
+  "revision",
+  "gap-analysis",
+  "recommendations",
+  "search",
+  "planner",
+]);
+
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 function fmtAgo(iso) {
   try {
@@ -236,7 +250,24 @@ export default function SyllabusTracker() {
   const [activityLog, setActivityLog] = useState([]);
   const [revisionQueue, setRevisionQueue] = useState([]);
   const [selectedSubject, setSelectedSubject] = useState(null);
-  const [view, setView] = useState("overview");
+
+  // CHANGE 2 — Phase 34 Batch C: lazy initialiser reads sessionStorage once.
+  // If the Dashboard Command Center stored a target tab, consume it
+  // (remove immediately so back-navigation does not re-apply a stale value).
+  // Any value absent from VALID_TAB_IDS falls back to "overview".
+  const [view, setView] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem("studymind_syllabus_initial_tab");
+      if (stored) {
+        sessionStorage.removeItem("studymind_syllabus_initial_tab");
+        if (VALID_TAB_IDS.has(stored)) return stored;
+      }
+    } catch {
+      // sessionStorage unavailable (e.g. private-browsing quirks) — ignore
+    }
+    return "overview";
+  });
+
   const [highlightedTopicId, setHighlightedTopicId] = useState(null);
 
   // ── Search state ──────────────────────────────────────────────────────────
