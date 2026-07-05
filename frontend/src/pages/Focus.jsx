@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Timer, BarChart3, Clock, Trophy } from "lucide-react";
+import { Timer, BarChart3, Clock, Trophy, BookOpen } from "lucide-react";
 import {
   FocusProvider,
   useFocus,
@@ -15,6 +15,11 @@ import CompletionScreen from "../components/focus/CompletionScreen.jsx";
 import FocusAnalytics from "../components/focus/FocusAnalytics.jsx";
 import SessionHistory from "../components/focus/SessionHistory.jsx";
 import FocusAchievements from "../components/focus/FocusAchievements.jsx";
+import syllabusService from "../services/syllabusService.js";
+import {
+  startFocusSyllabusSession,
+  clearFocusSyllabusSession,
+} from "../utils/focusSyllabusSession.js";
 
 const TABS = [
   { id: "home", label: "Focus", icon: Timer },
@@ -22,6 +27,113 @@ const TABS = [
   { id: "history", label: "History", icon: Clock },
   { id: "achievements", label: "Achievements", icon: Trophy },
 ];
+
+// ─── STUDY CONTEXT CARD ───────────────────────────────────────────────────────
+
+function StudyContextCard({ subjects, value, onChange }) {
+  const hasSubjects = subjects.length > 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25 }}
+      className="max-w-3xl mx-auto rounded-2xl border border-white/[0.06] p-5"
+      style={{ background: "#0A0A14" }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <BookOpen size={14} className="text-[#7C6FFF]" />
+          <span className="text-[13px] font-black text-white">
+            Study Context
+          </span>
+        </div>
+        <span
+          className="text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider"
+          style={{
+            background: "rgba(255,255,255,0.05)",
+            color: "rgba(255,255,255,0.28)",
+          }}
+        >
+          Optional
+        </span>
+      </div>
+
+      <p className="text-[11px] text-white/35 mb-3 leading-relaxed">
+        What are you studying? Tagging a subject lets StudyMind track your
+        syllabus coverage automatically.
+      </p>
+
+      {/* Dropdown */}
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full rounded-xl border px-3.5 py-2.5 text-[12px] outline-none
+                     transition-all appearance-none cursor-pointer pr-9"
+          style={{
+            background: "rgba(255,255,255,0.04)",
+            borderColor: value
+              ? "rgba(124,111,255,0.40)"
+              : "rgba(255,255,255,0.08)",
+            color: value ? "rgba(255,255,255,0.80)" : "rgba(255,255,255,0.30)",
+          }}
+        >
+          <option value="" style={{ background: "#0D0D1A" }}>
+            Select Subject (Optional)
+          </option>
+          {hasSubjects ? (
+            subjects.map((s) => (
+              <option key={s.id} value={s.id} style={{ background: "#0D0D1A" }}>
+                {s.emoji ? `${s.emoji}  ` : ""}
+                {s.label}
+              </option>
+            ))
+          ) : (
+            <option disabled style={{ background: "#0D0D1A" }}>
+              No subjects available
+            </option>
+          )}
+        </select>
+
+        {/* Custom chevron */}
+        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path
+              d="M2 4l4 4 4-4"
+              stroke={value ? "#7C6FFF" : "rgba(255,255,255,0.28)"}
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+      </div>
+
+      {/* Selected indicator + clear */}
+      {value && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-white/[0.05]"
+        >
+          <span className="text-[10px] text-[#7C6FFF]/70 font-bold">
+            ✓ Subject tagged — will be recorded with this session
+          </span>
+          <button
+            onClick={() => onChange("")}
+            className="text-[10px] text-white/22 hover:text-white/50 transition-colors ml-3 shrink-0"
+          >
+            Clear
+          </button>
+        </motion.div>
+      )}
+    </motion.div>
+  );
+}
+
+// ─── FOCUS SHELL ──────────────────────────────────────────────────────────────
 
 function FocusShell() {
   const { phase } = useFocus();
@@ -34,6 +146,81 @@ function FocusShell() {
   const inSession = ["setup", "session", "break", "complete"].includes(phase);
   const stats = useMemo(() => getFocusStats(), [phase]);
   const history = useMemo(() => getFocusHistory(), [phase]);
+
+  // ── Phase 35 Batch B: Study Context state ────────────────────────────────
+  const [activeExam, setActiveExam] = useState("upsc");
+  const [subjects, setSubjects] = useState([]);
+  const [selectedSubjectId, setSelectedSubjectId] = useState("");
+
+  // Ref keeps the latest selection accessible inside phase-watch effect
+  // without adding it to the dependency array (avoids stale closures).
+  const selectionRef = useRef({
+    selectedSubjectId: "",
+    subjects: [],
+    activeExam: "upsc",
+  });
+
+  useEffect(() => {
+    selectionRef.current = { selectedSubjectId, subjects, activeExam };
+  }, [selectedSubjectId, subjects, activeExam]);
+
+  // Load subjects for the current active exam on mount
+  useEffect(() => {
+    try {
+      const examId = syllabusService.getActiveExam();
+      setActiveExam(examId);
+      const subs = syllabusService.getAllSubjectProgress(examId) ?? [];
+      // Flatten to minimal shape the card needs: { id, label, emoji }
+      setSubjects(
+        subs.map((s) => ({
+          id: s.id,
+          label: s.label ?? s.id,
+          emoji: s.emoji ?? "",
+        })),
+      );
+    } catch {
+      setSubjects([]);
+    }
+  }, []);
+
+  // Watch for the transition from home into the session flow.
+  // When phase enters "setup", persist the chosen syllabus context
+  // (or clear any stale session if nothing was selected).
+  const prevPhaseRef = useRef(phase);
+  useEffect(() => {
+    const prev = prevPhaseRef.current;
+    prevPhaseRef.current = phase;
+
+    const wasOutside = !["setup", "session", "break", "complete"].includes(
+      prev,
+    );
+    const nowSetup = phase === "setup";
+
+    if (wasOutside && nowSetup) {
+      const {
+        selectedSubjectId: sid,
+        subjects: subs,
+        activeExam: eid,
+      } = selectionRef.current;
+
+      if (sid) {
+        const subject = subs.find((s) => s.id === sid);
+        if (subject) {
+          startFocusSyllabusSession({
+            examId: eid,
+            subjectId: subject.id,
+            subjectLabel: subject.label,
+            topicId: null,
+            topicLabel: null,
+            startedAt: new Date().toISOString(),
+          });
+        }
+      } else {
+        // No subject chosen — clear any leftover session from a prior run
+        clearFocusSyllabusSession();
+      }
+    }
+  }, [phase]);
 
   return (
     <div className="min-h-full pb-10">
@@ -115,7 +302,15 @@ function FocusShell() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
           >
-            <FocusHome onAnalyticsClick={() => setView("analytics")} />
+            {/* Study Context card above FocusHome — Phase 35 Batch B */}
+            <div className="space-y-5">
+              <StudyContextCard
+                subjects={subjects}
+                value={selectedSubjectId}
+                onChange={setSelectedSubjectId}
+              />
+              <FocusHome onAnalyticsClick={() => setView("analytics")} />
+            </div>
           </motion.div>
         )}
         {!inSession && view === "analytics" && (
