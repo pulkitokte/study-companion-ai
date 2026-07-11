@@ -207,6 +207,27 @@ export default function PostSessionTopicModal({ isOpen, onClose }) {
       } catch {}
     });
 
+    // Phase 35 Batch D: emit global cross-system sync event.
+    // Emitted only after ALL topics have been processed — never on partial updates.
+    // Every system that subscribes to this event (SyllabusTracker, Dashboard,
+    // Analytics, RevisionQueue, ReadinessScore, Countdown) will reload
+    // its data automatically without requiring a page refresh.
+    try {
+      window.dispatchEvent(
+        new CustomEvent("studymind:syllabus-updated", {
+          detail: {
+            examId: session.examId,
+            subjectId: session.subjectId,
+            completedTopics: [...selectedIds],
+            xpEarned: earned,
+            timestamp: new Date().toISOString(),
+          },
+        }),
+      );
+    } catch {
+      // Never let event dispatch crash the completion flow
+    }
+
     setTotalXP(earned);
     setSubmitDone(true);
     setSubmitting(false);
