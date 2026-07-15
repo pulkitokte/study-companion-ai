@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -39,6 +39,7 @@ import { CATEGORIES } from "../data/mockQuizData.js";
 import SyllabusDashboardWidget from "../components/syllabus/SyllabusDashboardWidget.jsx";
 import syllabusService from "../services/syllabusService.js";
 import { getRankedRecommendations } from "../lib/recommendationEngine.js";
+import { useSyllabusSyncListener } from "../hooks/useSyllabusSyncListener.js";
 
 // Return mobile layout on small screens
 function DashboardContent() {
@@ -160,45 +161,56 @@ function DesktopDashboard() {
     }
   }, []);
 
-  const commandExamProgress = useMemo(() => {
+  const [commandExamProgress, setCommandExamProgress] = useState(null);
+  const [commandSubjectProgress, setCommandSubjectProgress] = useState([]);
+  const [commandActivityLog, setCommandActivityLog] = useState([]);
+  const [commandRevisionQueue, setCommandRevisionQueue] = useState([]);
+  const [commandRecommendations, setCommandRecommendations] = useState([]);
+
+  // Phase 35 Batch F: loader extracted from the previous one-shot useMemo
+  // calls so it can be re-run whenever syllabus data changes (e.g. after
+  // a topic is completed from the Focus post-session workflow), without
+  // duplicating any of the underlying syllabusService/recommendation calls.
+  const loadCommandData = useCallback(() => {
     try {
-      return syllabusService.getExamProgress(activeExam);
+      setCommandExamProgress(syllabusService.getExamProgress(activeExam));
     } catch {
-      return null;
+      setCommandExamProgress(null);
+    }
+    try {
+      setCommandSubjectProgress(
+        syllabusService.getAllSubjectProgress(activeExam) ?? [],
+      );
+    } catch {
+      setCommandSubjectProgress([]);
+    }
+    try {
+      setCommandActivityLog(syllabusService.getActivityLog(500) ?? []);
+    } catch {
+      setCommandActivityLog([]);
+    }
+    try {
+      setCommandRevisionQueue(
+        syllabusService.getTodayRevisionQueue(activeExam) ?? [],
+      );
+    } catch {
+      setCommandRevisionQueue([]);
+    }
+    try {
+      setCommandRecommendations(getRankedRecommendations() ?? []);
+    } catch {
+      setCommandRecommendations([]);
     }
   }, [activeExam]);
 
-  const commandSubjectProgress = useMemo(() => {
-    try {
-      return syllabusService.getAllSubjectProgress(activeExam) ?? [];
-    } catch {
-      return [];
-    }
-  }, [activeExam]);
+  useEffect(() => {
+    loadCommandData();
+  }, [loadCommandData]);
 
-  const commandActivityLog = useMemo(() => {
-    try {
-      return syllabusService.getActivityLog(500) ?? [];
-    } catch {
-      return [];
-    }
-  }, []);
-
-  const commandRevisionQueue = useMemo(() => {
-    try {
-      return syllabusService.getTodayRevisionQueue(activeExam) ?? [];
-    } catch {
-      return [];
-    }
-  }, [activeExam]);
-
-  const commandRecommendations = useMemo(() => {
-    try {
-      return getRankedRecommendations() ?? [];
-    } catch {
-      return [];
-    }
-  }, []);
+  // Phase 35 Batch F: reuse the existing Batch E sync hook so Command
+  // Center's syllabus-derived data refreshes live after a topic
+  // completion, exactly like SyllabusTracker / SyllabusDashboardWidget.
+  useSyllabusSyncListener(loadCommandData);
 
   // ── Phase 34: Command Center navigation handler ────────────────────────────
   // Tab is stored in sessionStorage so SyllabusTracker can restore it on mount.
