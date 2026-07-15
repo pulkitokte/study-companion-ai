@@ -4,6 +4,7 @@ import { BookOpen, Trophy, Calendar, AlertTriangle, Clock } from "lucide-react";
 import syllabusService from "../../../services/syllabusService.js";
 import { useToast } from "../../ui/Toast.jsx";
 import RevisionQueue from "./RevisionQueue.jsx";
+import { useSyllabusSyncListener } from "../../../hooks/useSyllabusSyncListener.js";
 
 /**
  * RevisionView — Phase 31 update
@@ -50,6 +51,23 @@ export default function RevisionView({ activeExam, onProgressChange }) {
     setLoading(true);
     loadRevisionData();
   }, [loadRevisionData]);
+
+  // ── Phase 35 Batch E: live sync ─────────────────────────────────────────
+  // This view fetches its own revision queue/stats independently of
+  // SyllabusTracker's loadData(), so it needs its own listener.
+  // Only reloads if the event concerns this view's active exam (or if
+  // no examId is present on the payload, in which case we refresh to be safe).
+  useSyllabusSyncListener(
+    useCallback(
+      (detail) => {
+        if (detail && detail.examId && detail.examId !== activeExam) {
+          return; // update was for a different exam — no need to refresh
+        }
+        loadRevisionData();
+      },
+      [activeExam, loadRevisionData],
+    ),
+  );
 
   // ── Action handler ────────────────────────────────────────────────────────
   const handleAction = useCallback(

@@ -28,6 +28,7 @@ import GapAnalysisView from "../components/syllabus/gap-analysis/GapAnalysisView
 import RecommendationView from "../components/syllabus/recommendations/RecommendationView.jsx";
 import { buildSearchIndex, runSearch } from "../utils/searchUtils.js";
 import { getQuizHistory } from "../utils/quizStorage.js";
+import { useSyllabusSyncListener } from "../hooks/useSyllabusSyncListener.js";
 
 // ─── ANIMATION VARIANTS ───────────────────────────────────────────────────────
 const C = { hidden: {}, visible: { transition: { staggerChildren: 0.07 } } };
@@ -356,6 +357,15 @@ export default function SyllabusTracker() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // ── Phase 35 Batch E: live sync ─────────────────────────────────────────
+  // Reload all syllabus-derived state whenever a Focus-session topic
+  // completion (or any other future emitter) fires studymind:syllabus-updated.
+  // This single refresh cascades into every child that receives its data
+  // as props from this page (ExamCountdownCard, ExamReadinessCard,
+  // SyllabusAnalyticsView, GapAnalysisView, RecommendationView,
+  // ActivityHeatmap) — none of them need their own listener.
+  useSyllabusSyncListener(loadData);
 
   // Close panel when exam switches
   useEffect(() => {

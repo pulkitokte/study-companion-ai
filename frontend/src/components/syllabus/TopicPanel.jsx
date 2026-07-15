@@ -2,6 +2,9 @@
 // In TopicRow, add highlightedTopicId to props and wire scroll + pulse.
 // Replace the existing TopicRow function with this version:
 // Phase 29: Added Notes & Resources collapsible section per TopicRow.
+// Phase 35 Batch E: TopicPanel now listens for studymind:syllabus-updated
+// and refreshes its own progress data when the update concerns the
+// exam/subject currently open in this panel.
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -21,6 +24,7 @@ import syllabusService, {
 import { getTopics } from "../../data/syllabusData.js";
 import { useToast } from "../ui/Toast.jsx";
 import TopicNotesPanel from "./TopicNotesPanel.jsx";
+import { useSyllabusSyncListener } from "../../hooks/useSyllabusSyncListener.js";
 
 // ─── STATIC CONFIG ────────────────────────────────────────────────────────────
 
@@ -391,6 +395,28 @@ export default function TopicPanel({
   useEffect(() => {
     loadProgress();
   }, [loadProgress]);
+
+  // ── Phase 35 Batch E: live sync ─────────────────────────────────────────
+  // This panel already owns its own loadProgress(). Reuse it directly —
+  // only reload when the update concerns the exam/subject currently open
+  // in this panel (or when no examId/subjectId is present on the payload,
+  // in which case we refresh to be safe).
+  useSyllabusSyncListener(
+    useCallback(
+      (detail) => {
+        if (
+          detail &&
+          detail.examId &&
+          detail.subjectId &&
+          (detail.examId !== examId || detail.subjectId !== subject.id)
+        ) {
+          return; // update was for a different exam/subject — skip refresh
+        }
+        loadProgress();
+      },
+      [examId, subject.id, loadProgress],
+    ),
+  );
 
   // When highlightedTopicId is set, force filter to 'all' so the topic is visible
   useEffect(() => {

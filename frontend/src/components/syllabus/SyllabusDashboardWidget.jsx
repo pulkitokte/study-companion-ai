@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { BookOpen, ChevronRight, Zap, Trophy } from "lucide-react";
 import syllabusService from "../../services/syllabusService.js";
 import { getExam } from "../../data/syllabusData.js";
 import SyllabusProgressRing from "./SyllabusProgressRing.jsx";
+import { useSyllabusSyncListener } from "../../hooks/useSyllabusSyncListener.js";
 
 export default function SyllabusDashboardWidget() {
   const navigate = useNavigate();
@@ -13,7 +14,7 @@ export default function SyllabusDashboardWidget() {
   const [examProgress, setExamProgress] = useState(null);
   const [nextTopic, setNextTopic] = useState(null);
 
-  useEffect(() => {
+  const loadWidgetData = useCallback(() => {
     const examId = syllabusService.getActiveExam();
     const progress = syllabusService.getExamProgress(examId);
     const next = syllabusService.getNextTopic(examId);
@@ -23,6 +24,15 @@ export default function SyllabusDashboardWidget() {
     setExamProgress(progress);
     setNextTopic(next);
   }, []);
+
+  useEffect(() => {
+    loadWidgetData();
+  }, [loadWidgetData]);
+
+  // Phase 35 Batch E: refresh this widget the moment a Focus-session
+  // topic completion (or any other emitter) fires studymind:syllabus-updated,
+  // so the Dashboard never shows stale progress/next-topic data.
+  useSyllabusSyncListener(loadWidgetData);
 
   const pct = examProgress?.pct ?? 0;
   const done = examProgress?.done ?? 0;
