@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, CheckSquare, Square, Loader2, Check } from "lucide-react";
 import {
@@ -130,6 +130,16 @@ export default function PostSessionTopicModal({ isOpen, onClose }) {
   const [submitDone, setSubmitDone] = useState(false);
   const [totalXP, setTotalXP] = useState(0);
 
+  // Phase 35 Batch G: synchronous guard against double-submission.
+  // `submitting` is React state and updates asynchronously — a fast
+  // double-click (or duplicate programmatic call) before the next render
+  // could otherwise slip past the `submitting` check in handleConfirm and
+  // process the same topic batch twice (duplicate XP, duplicate
+  // studymind:syllabus-updated dispatch). This ref is checked/set
+  // synchronously, before any state update or async work, so a second
+  // call in the same tick is rejected immediately.
+  const submitLockRef = useRef(false);
+
   // ── Load session + topics when modal opens ─────────────────────────────
   useEffect(() => {
     if (!isOpen) return;
@@ -139,8 +149,14 @@ export default function PostSessionTopicModal({ isOpen, onClose }) {
     setSubmitDone(false);
     setTotalXP(0);
     setSubmitting(false);
+    submitLockRef.current = false;
 
     try {
+      // getCurrentFocusSyllabusSession is now self-expiring (Phase 35
+      // Batch G) — if the session is stale (e.g. left over from a tab
+      // that was closed/refreshed mid-flow days ago), this already
+      // returns null and the modal simply renders nothing, exactly as
+      // if no syllabus context had ever been set.
       const currentSession = getCurrentFocusSyllabusSession();
       if (!currentSession) {
         setSession(null);
@@ -186,7 +202,14 @@ export default function PostSessionTopicModal({ isOpen, onClose }) {
 
   // ── Confirm: mark selected topics completed ───────────────────────────
   const handleConfirm = async () => {
+    // Phase 35 Batch G: synchronous re-entrancy guard — must be the very
+    // first thing checked, before any state reads/writes or early returns,
+    // so a second overlapping call can never race past this point.
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
+
     if (!session || selectedIds.size === 0) {
+      submitLockRef.current = false;
       handleSkip();
       return;
     }
@@ -212,6 +235,8 @@ export default function PostSessionTopicModal({ isOpen, onClose }) {
     // Every system that subscribes to this event (SyllabusTracker, Dashboard,
     // Analytics, RevisionQueue, ReadinessScore, Countdown) will reload
     // its data automatically without requiring a page refresh.
+    // UNCHANGED in Batch G — event name, payload shape, and dispatch timing
+    // are exactly as Batch D left them.
     try {
       window.dispatchEvent(
         new CustomEvent("studymind:syllabus-updated", {

@@ -27,15 +27,51 @@
  *     topicLabel:   string | null   — human-readable topic name, or null
  *     startedAt:    string          — ISO timestamp of when the session started
  *   }
+ *
+ * PHASE 35 BATCH G — ROBUSTNESS:
+ *   A session written here is only ever meant to live for the duration of
+ *   one Focus session + the post-session modal. If a tab is closed or
+ *   refreshed while the modal is pending, or the modal is otherwise never
+ *   resolved, the mapping previously stayed in localStorage indefinitely
+ *   and could silently resurface days later (e.g. re-triggering the modal
+ *   for a stale subject on the next unrelated Focus session, if some
+ *   future code path re-reads it before Batch B's overwrite-or-clear logic
+ *   runs). All reads now transparently expire sessions older than
+ *   MAX_SESSION_AGE_MS and self-heal by clearing them — no caller needs
+ *   to change, since expired sessions simply behave as "no session".
  */
 
 const STORAGE_KEY = "studymind_focus_syllabus_session";
 
+// Phase 35 Batch G: any stored session older than this is considered
+// abandoned/stale and is treated as absent (and cleared) on next read.
+// 6 hours comfortably covers the longest realistic Deep Work session +
+// break + time spent on the post-session modal, while still guaranteeing
+// a forgotten mapping cannot leak into an unrelated session days later.
+const MAX_SESSION_AGE_MS = 6 * 60 * 60 * 1000;
+
 // ─── PRIVATE HELPERS ─────────────────────────────────────────────────────────
 
 /**
+ * Returns true if the session's startedAt timestamp is missing, invalid,
+ * or older than MAX_SESSION_AGE_MS.
+ */
+function _isExpired(session) {
+  try {
+    if (!session || typeof session.startedAt !== "string") return true;
+    const startedMs = new Date(session.startedAt).getTime();
+    if (isNaN(startedMs)) return true;
+    return Date.now() - startedMs > MAX_SESSION_AGE_MS;
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Reads and parses the session from localStorage.
- * Returns the parsed object, or null if absent or malformed.
+ * Returns the parsed object, or null if absent, malformed, or expired.
+ * Expired sessions are proactively cleared from storage so subsequent
+ * reads/writes never have to repeat the same expiry check.
  */
 function _readRaw() {
   try {
@@ -49,6 +85,16 @@ function _readRaw() {
       typeof parsed.examId === "string" &&
       typeof parsed.subjectId === "string"
     ) {
+      if (_isExpired(parsed)) {
+        // Self-heal: silently drop the stale mapping so it can never
+        // resurface for a later, unrelated Focus session.
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
+        return null;
+      }
       return parsed;
     }
     return null;
@@ -146,8 +192,8 @@ export function startFocusSyllabusSession(payload) {
 /**
  * getCurrentFocusSyllabusSession
  *
- * Returns the currently stored syllabus session, or null if none exists
- * or the stored value is malformed.
+ * Returns the currently stored syllabus session, or null if none exists,
+ * the stored value is malformed, or it has expired (Phase 35 Batch G).
  *
  * @returns {object | null}
  *   {
@@ -180,8 +226,8 @@ export function clearFocusSyllabusSession() {
 /**
  * hasActiveFocusSyllabusSession
  *
- * Returns true if a valid syllabus session is currently stored,
- * false otherwise.
+ * Returns true if a valid, non-expired syllabus session is currently
+ * stored, false otherwise.
  *
  * @returns {boolean}
  */
@@ -194,7 +240,8 @@ export function hasActiveFocusSyllabusSession() {
  *
  * Merges partial updates into the existing session without replacing it.
  * Useful for adding a topicId after the session has already started.
- * No-op (returns null) if no session currently exists.
+ * No-op (returns null) if no session currently exists (including if the
+ * existing session has expired — Phase 35 Batch G).
  *
  * @param {object} updates  Partial session fields to merge
  * @returns {object | null} The updated session, or null on failure / no session.
