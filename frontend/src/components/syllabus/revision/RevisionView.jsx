@@ -1,19 +1,20 @@
-import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { BookOpen, Trophy, Calendar, AlertTriangle, Clock } from "lucide-react";
 import syllabusService from "../../../services/syllabusService.js";
 import { useToast } from "../../ui/Toast.jsx";
 import RevisionQueue from "./RevisionQueue.jsx";
-import { useSyllabusSyncListener } from "../../../hooks/useSyllabusSyncListener.js";
+import { useRevisionQueue } from "../../../hooks/useRevisionQueue.js";
 
 /**
- * RevisionView — Phase 31 update
+ * RevisionView — Phase 31 update, Phase 36 Batch A consolidation
  *
- * Now powered by syllabusService.getTodayRevisionQueue() and
- * syllabusService.getRevisionStats() from the spaced repetition engine.
- *
- * Replaces the old buildRevisionQueue() from revisionEngine.js.
- * All existing toast / XP / achievement logic is preserved.
+ * Now powered by the shared useRevisionQueue(examId) hook, which wraps
+ * syllabusService.getTodayRevisionQueue() / getRevisionStats() and the
+ * existing Phase 35 sync architecture. Previously this component owned
+ * its own duplicated loader + useSyllabusSyncListener wiring — that has
+ * been consolidated into the hook, with identical behavior and identical
+ * returned data shapes. All existing toast / XP / achievement logic is
+ * preserved unchanged.
  *
  * Props:
  *   activeExam       {string}   current exam id
@@ -22,130 +23,84 @@ import { useSyllabusSyncListener } from "../../../hooks/useSyllabusSyncListener.
 export default function RevisionView({ activeExam, onProgressChange }) {
   const { show } = useToast();
 
-  const [queue, setQueue] = useState(null); // flat sorted array
-  const [revisionStats, setRevisionStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  // ── Load spaced-repetition queue + stats ─────────────────────────────────
-  const loadRevisionData = useCallback(() => {
-    try {
-      const todayQueue = syllabusService.getTodayRevisionQueue(activeExam);
-      const stats = syllabusService.getRevisionStats(activeExam);
-      setQueue(Array.isArray(todayQueue) ? todayQueue : []);
-      setRevisionStats(stats);
-    } catch {
-      setQueue([]);
-      setRevisionStats({
-        totalScheduled: 0,
-        dueToday: 0,
-        overdueCount: 0,
-        graduatedCount: 0,
-        nextDueDate: null,
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [activeExam]);
-
-  useEffect(() => {
-    setLoading(true);
-    loadRevisionData();
-  }, [loadRevisionData]);
-
-  // ── Phase 35 Batch E: live sync ─────────────────────────────────────────
-  // This view fetches its own revision queue/stats independently of
-  // SyllabusTracker's loadData(), so it needs its own listener.
-  // Only reloads if the event concerns this view's active exam (or if
-  // no examId is present on the payload, in which case we refresh to be safe).
-  useSyllabusSyncListener(
-    useCallback(
-      (detail) => {
-        if (detail && detail.examId && detail.examId !== activeExam) {
-          return; // update was for a different exam — no need to refresh
-        }
-        loadRevisionData();
-      },
-      [activeExam, loadRevisionData],
-    ),
-  );
+  const {
+    queue,
+    stats: revisionStats,
+    loading,
+    refresh: loadRevisionData,
+  } = useRevisionQueue(activeExam);
 
   // ── Action handler ────────────────────────────────────────────────────────
-  const handleAction = useCallback(
-    (item, actionType) => {
-      let result;
+  const handleAction = (item, actionType) => {
+    let result;
 
-      if (actionType === "revise") {
-        // Phase 31: use markTopicRevised — advances spaced repetition level
-        result = syllabusService.markTopicRevised(
-          item.examId,
-          item.subjectId,
-          item.topicId,
-        );
-      } else if (actionType === "master") {
-        result = syllabusService.markMastered(
-          item.examId,
-          item.subjectId,
-          item.topicId,
-        );
-      } else {
-        return;
-      }
+    if (actionType === "revise") {
+      // Phase 31: use markTopicRevised — advances spaced repetition level
+      result = syllabusService.markTopicRevised(
+        item.examId,
+        item.subjectId,
+        item.topicId,
+      );
+    } else if (actionType === "master") {
+      result = syllabusService.markMastered(
+        item.examId,
+        item.subjectId,
+        item.topicId,
+      );
+    } else {
+      return;
+    }
 
-      if (!result?.ok) {
+    if (!result?.ok) {
+      show({
+        type: "info",
+        title: "Could not update topic",
+        message: result?.error ?? "Please try again.",
+        duration: 2000,
+      });
+      return;
+    }
+
+    const totalXP = (result.xpEarned ?? 0) + (result.bonusXP ?? 0);
+
+    if (totalXP > 0) {
+      if ((result.bonusXP ?? 0) > 0) {
         show({
-          type: "info",
-          title: "Could not update topic",
-          message: result?.error ?? "Please try again.",
-          duration: 2000,
-        });
-        return;
-      }
-
-      const totalXP = (result.xpEarned ?? 0) + (result.bonusXP ?? 0);
-
-      if (totalXP > 0) {
-        if ((result.bonusXP ?? 0) > 0) {
-          show({
-            type: "mission",
-            title: `🎯 Milestone! +${totalXP} XP`,
-            message: `+${result.bonusXP} bonus XP unlocked!`,
-            duration: 3500,
-          });
-        } else {
-          show({
-            type: "xp",
-            title: `+${result.xpEarned} XP`,
-            message:
-              actionType === "revise" ? "Topic revised" : "Topic mastered",
-            duration: 2000,
-          });
-        }
-      } else {
-        show({
-          type: "info",
-          title:
-            actionType === "revise"
-              ? "Marked as revised"
-              : "Marked as mastered",
-          duration: 1500,
-        });
-      }
-
-      if (result.newAchievements?.length > 0) {
-        show({
-          type: "achievement",
-          title: "🏆 Achievement Unlocked!",
-          message: "Check your Profile page",
+          type: "mission",
+          title: `🎯 Milestone! +${totalXP} XP`,
+          message: `+${result.bonusXP} bonus XP unlocked!`,
           duration: 3500,
         });
+      } else {
+        show({
+          type: "xp",
+          title: `+${result.xpEarned} XP`,
+          message: actionType === "revise" ? "Topic revised" : "Topic mastered",
+          duration: 2000,
+        });
       }
+    } else {
+      show({
+        type: "info",
+        title:
+          actionType === "revise" ? "Marked as revised" : "Marked as mastered",
+        duration: 1500,
+      });
+    }
 
-      // Rebuild queue so acted-on card disappears; refresh parent hero stats
-      loadRevisionData();
-      onProgressChange?.();
-    },
-    [loadRevisionData, onProgressChange, show],
-  );
+    if (result.newAchievements?.length > 0) {
+      show({
+        type: "achievement",
+        title: "🏆 Achievement Unlocked!",
+        message: "Check your Profile page",
+        duration: 3500,
+      });
+    }
+
+    // Rebuild queue so acted-on card disappears; refresh parent hero stats
+    loadRevisionData();
+    onProgressChange?.();
+  };
 
   // ── Loading spinner ───────────────────────────────────────────────────────
   if (loading || queue === null) {

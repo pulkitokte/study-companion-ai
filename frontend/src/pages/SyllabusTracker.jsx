@@ -29,6 +29,7 @@ import RecommendationView from "../components/syllabus/recommendations/Recommend
 import { buildSearchIndex, runSearch } from "../utils/searchUtils.js";
 import { getQuizHistory } from "../utils/quizStorage.js";
 import { useSyllabusSyncListener } from "../hooks/useSyllabusSyncListener.js";
+import { useRevisionQueue } from "../hooks/useRevisionQueue.js";
 
 // ─── ANIMATION VARIANTS ───────────────────────────────────────────────────────
 const C = { hidden: {}, visible: { transition: { staggerChildren: 0.07 } } };
@@ -249,8 +250,16 @@ export default function SyllabusTracker() {
   const [examProgress, setExamProgress] = useState(null);
   const [subjectData, setSubjectData] = useState([]);
   const [activityLog, setActivityLog] = useState([]);
-  const [revisionQueue, setRevisionQueue] = useState([]);
   const [selectedSubject, setSelectedSubject] = useState(null);
+
+  // Phase 36 Batch A: revision queue loading is now consolidated into the
+  // shared useRevisionQueue hook (single source of truth, also used by
+  // RevisionView and Dashboard). This replaces the previous duplicated
+  // syllabusService.getTodayRevisionQueue() call + local state that lived
+  // inside this page's own loadData(). Returned data shape (a plain array)
+  // is unchanged, so RecommendationView's prop contract is unaffected.
+  const { queue: revisionQueue, refresh: refreshRevisionQueue } =
+    useRevisionQueue(activeExam);
 
   // CHANGE 2 — Phase 34 Batch C: lazy initialiser reads sessionStorage once.
   // If the Dashboard Command Center stored a target tab, consume it
@@ -342,16 +351,13 @@ export default function SyllabusTracker() {
   }, [query, searchIndex]);
 
   // ── Data loading ──────────────────────────────────────────────────────────
+  // Phase 36 Batch A: revision-queue fetching has moved to useRevisionQueue
+  // above — this loader now only owns examProgress / subjectData / activityLog,
+  // exactly as before minus the duplicated revision-queue block.
   const loadData = useCallback(() => {
     setExamProgress(syllabusService.getExamProgress(activeExam));
     setSubjectData(syllabusService.getAllSubjectProgress(activeExam));
     setActivityLog(syllabusService.getActivityLog(500));
-    // Phase 33: load today's spaced-repetition queue for recommendation engine
-    try {
-      setRevisionQueue(syllabusService.getTodayRevisionQueue(activeExam) ?? []);
-    } catch {
-      setRevisionQueue([]);
-    }
   }, [activeExam]);
 
   useEffect(() => {
@@ -363,8 +369,9 @@ export default function SyllabusTracker() {
   // completion (or any other future emitter) fires studymind:syllabus-updated.
   // This single refresh cascades into every child that receives its data
   // as props from this page (ExamCountdownCard, ExamReadinessCard,
-  // SyllabusAnalyticsView, GapAnalysisView, RecommendationView,
-  // ActivityHeatmap) — none of them need their own listener.
+  // SyllabusAnalyticsView, GapAnalysisView, ActivityHeatmap) — none of them
+  // need their own listener. The revision queue refreshes independently via
+  // its own hook-internal listener (Phase 36 Batch A).
   useSyllabusSyncListener(loadData);
 
   // Close panel when exam switches
@@ -389,6 +396,10 @@ export default function SyllabusTracker() {
 
   const handleRefresh = () => {
     loadData();
+    // Phase 36 Batch A: the revision queue is no longer part of loadData(),
+    // so the manual Refresh button explicitly refreshes it too, preserving
+    // the exact refresh behavior this button had before consolidation.
+    refreshRevisionQueue();
     show({ type: "info", title: "Refreshed", duration: 1500 });
   };
 

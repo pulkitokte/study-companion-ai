@@ -40,6 +40,7 @@ import SyllabusDashboardWidget from "../components/syllabus/SyllabusDashboardWid
 import syllabusService from "../services/syllabusService.js";
 import { getRankedRecommendations } from "../lib/recommendationEngine.js";
 import { useSyllabusSyncListener } from "../hooks/useSyllabusSyncListener.js";
+import { useRevisionQueue } from "../hooks/useRevisionQueue.js";
 
 // Return mobile layout on small screens
 function DashboardContent() {
@@ -164,13 +165,23 @@ function DesktopDashboard() {
   const [commandExamProgress, setCommandExamProgress] = useState(null);
   const [commandSubjectProgress, setCommandSubjectProgress] = useState([]);
   const [commandActivityLog, setCommandActivityLog] = useState([]);
-  const [commandRevisionQueue, setCommandRevisionQueue] = useState([]);
   const [commandRecommendations, setCommandRecommendations] = useState([]);
+
+  // Phase 36 Batch A: revision-queue fetching is now consolidated into the
+  // shared useRevisionQueue hook (single source of truth, also used by
+  // RevisionView and SyllabusTracker). This replaces the previous
+  // duplicated syllabusService.getTodayRevisionQueue() call + local state
+  // that lived inside this component's own loadCommandData(). Returned
+  // data shape (a plain array) is unchanged, so CommandCenter's prop
+  // contract is unaffected.
+  const { queue: commandRevisionQueue } = useRevisionQueue(activeExam);
 
   // Phase 35 Batch F: loader extracted from the previous one-shot useMemo
   // calls so it can be re-run whenever syllabus data changes (e.g. after
   // a topic is completed from the Focus post-session workflow), without
   // duplicating any of the underlying syllabusService/recommendation calls.
+  // Phase 36 Batch A: revision-queue fetching removed from this loader —
+  // it now lives solely in useRevisionQueue above.
   const loadCommandData = useCallback(() => {
     try {
       setCommandExamProgress(syllabusService.getExamProgress(activeExam));
@@ -190,13 +201,6 @@ function DesktopDashboard() {
       setCommandActivityLog([]);
     }
     try {
-      setCommandRevisionQueue(
-        syllabusService.getTodayRevisionQueue(activeExam) ?? [],
-      );
-    } catch {
-      setCommandRevisionQueue([]);
-    }
-    try {
       setCommandRecommendations(getRankedRecommendations() ?? []);
     } catch {
       setCommandRecommendations([]);
@@ -210,6 +214,8 @@ function DesktopDashboard() {
   // Phase 35 Batch F: reuse the existing Batch E sync hook so Command
   // Center's syllabus-derived data refreshes live after a topic
   // completion, exactly like SyllabusTracker / SyllabusDashboardWidget.
+  // The revision queue refreshes independently via its own hook-internal
+  // listener (Phase 36 Batch A).
   useSyllabusSyncListener(loadCommandData);
 
   // ── Phase 34: Command Center navigation handler ────────────────────────────
