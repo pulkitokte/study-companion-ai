@@ -16,7 +16,15 @@
  *   subjectProgress  syllabusService.getAllSubjectProgress(examId)
  *   examProgress     syllabusService.getExamProgress(examId)
  *   activityLog      syllabusService.getActivityLog(500)
+ *
+ * Phase 36 Batch C: the overdue/due-today interpretation of revisionQueue
+ * previously computed inline here (two separate .filter(i => i.isOverdue))
+ * now goes through the shared revisionIntelligence module, so this file
+ * no longer duplicates that classification logic. No behavioural change —
+ * same counts, same messages, same priority ladder.
  */
+
+import { getOverdueCount, getDueTodayCount } from "./revisionIntelligence.js";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
@@ -118,15 +126,13 @@ export function buildDashboardMission({
 
   try {
     // ── 1. Overdue revisions ────────────────────────────────────────────────
-    const overdue = Array.isArray(revisionQueue)
-      ? revisionQueue.filter((i) => i.isOverdue === true)
-      : [];
+    const overdueCount = getOverdueCount(revisionQueue);
 
-    if (overdue.length > 0) {
+    if (overdueCount > 0) {
       return {
         emoji: "🔥",
-        title: `Clear ${overdue.length} Overdue Revision${overdue.length > 1 ? "s" : ""}`,
-        explanation: `${overdue.length} topic${overdue.length > 1 ? "s are" : " is"} past the scheduled revision date. Reviewing now preserves long-term retention.`,
+        title: `Clear ${overdueCount} Overdue Revision${overdueCount > 1 ? "s" : ""}`,
+        explanation: `${overdueCount} topic${overdueCount > 1 ? "s are" : " is"} past the scheduled revision date. Reviewing now preserves long-term retention.`,
         ctaLabel: "Start Revision",
         actionPath: "/syllabus",
         actionTab: "revision",
@@ -136,15 +142,13 @@ export function buildDashboardMission({
     }
 
     // ── 2. Due-today revisions ──────────────────────────────────────────────
-    const dueToday = Array.isArray(revisionQueue)
-      ? revisionQueue.filter((i) => i.isOverdue === false)
-      : [];
+    const dueTodayCount = getDueTodayCount(revisionQueue);
 
-    if (dueToday.length > 0) {
+    if (dueTodayCount > 0) {
       return {
         emoji: "📅",
-        title: `Finish Today's ${dueToday.length} Revision${dueToday.length > 1 ? "s" : ""}`,
-        explanation: `${dueToday.length} spaced-repetition revision${dueToday.length > 1 ? "s are" : " is"} scheduled for today. Completing them advances each topic's retention level.`,
+        title: `Finish Today's ${dueTodayCount} Revision${dueTodayCount > 1 ? "s" : ""}`,
+        explanation: `${dueTodayCount} spaced-repetition revision${dueTodayCount > 1 ? "s are" : " is"} scheduled for today. Completing them advances each topic's retention level.`,
         ctaLabel: "Today's Revisions",
         actionPath: "/syllabus",
         actionTab: "revision",
@@ -319,6 +323,11 @@ export function buildTodayProgress(activityLog = []) {
  *   Topics completed   30%  — scaled to a target of 5 topics/day
  *   Revisions done     20%  — scaled to pending revision count (min 1)
  *   Consistency        15%  — whether any activity happened in last 3 days
+ *
+ * NOTE: Phase 36 Batch C intentionally leaves this function untouched.
+ * It takes pendingRevisionCount as a plain scalar (not a revisionQueue
+ * array to interpret), so there is no overdue/urgency classification
+ * here to consolidate.
  *
  * @param {object} todayProgress  output of buildTodayProgress()
  * @param {Array}  activityLog    syllabusService.getActivityLog(500)

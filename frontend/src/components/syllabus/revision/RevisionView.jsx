@@ -1,20 +1,31 @@
+import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { BookOpen, Trophy, Calendar, AlertTriangle, Clock } from "lucide-react";
 import syllabusService from "../../../services/syllabusService.js";
 import { useToast } from "../../ui/Toast.jsx";
 import RevisionQueue from "./RevisionQueue.jsx";
 import { useRevisionQueue } from "../../../hooks/useRevisionQueue.js";
+import { buildRevisionSummary } from "../../../utils/revisionIntelligence.js";
 
 /**
- * RevisionView — Phase 31 update, Phase 36 Batch A consolidation
+ * RevisionView — Phase 31 update, Phase 36 Batch A/C consolidation
  *
- * Now powered by the shared useRevisionQueue(examId) hook, which wraps
- * syllabusService.getTodayRevisionQueue() / getRevisionStats() and the
- * existing Phase 35 sync architecture. Previously this component owned
- * its own duplicated loader + useSyllabusSyncListener wiring — that has
- * been consolidated into the hook, with identical behavior and identical
- * returned data shapes. All existing toast / XP / achievement logic is
- * preserved unchanged.
+ * Powered by the shared useRevisionQueue(examId) hook (Batch A), which
+ * wraps syllabusService.getTodayRevisionQueue() / getRevisionStats() and
+ * the existing Phase 35 sync architecture.
+ *
+ * Phase 36 Batch C: the empty-state detection ("no schedule yet" vs
+ * "nothing due today") and next-due-date formatting — previously
+ * computed inline in this component — now go through the shared
+ * revisionIntelligence.buildRevisionSummary() utility, so this is no
+ * longer a second place deriving those same interpretations. The raw
+ * stat pill values (Overdue / Due Today / Graduated) still read directly
+ * from revisionStats exactly as before, since revisionStats.dueToday
+ * intentionally includes overdue items (spacedRevisionEngine's own
+ * definition) and must not be substituted with the queue-derived
+ * "due today, excluding overdue" count used elsewhere — doing so would
+ * change the displayed numbers. All existing toast / XP / achievement
+ * logic is preserved unchanged.
  *
  * Props:
  *   activeExam       {string}   current exam id
@@ -29,6 +40,12 @@ export default function RevisionView({ activeExam, onProgressChange }) {
     loading,
     refresh: loadRevisionData,
   } = useRevisionQueue(activeExam);
+
+  // Phase 36 Batch C: single shared interpretation of queue + stats.
+  const summary = useMemo(
+    () => buildRevisionSummary(queue, revisionStats),
+    [queue, revisionStats],
+  );
 
   // ── Action handler ────────────────────────────────────────────────────────
   const handleAction = (item, actionType) => {
@@ -115,7 +132,7 @@ export default function RevisionView({ activeExam, onProgressChange }) {
     );
   }
 
-  const nothingScheduled = (revisionStats?.totalScheduled ?? 0) === 0;
+  const nothingScheduled = summary.totalScheduled === 0;
   const nothingDueToday = queue.length === 0;
 
   // ── No topics ever scheduled yet ──────────────────────────────────────────
@@ -153,12 +170,9 @@ export default function RevisionView({ activeExam, onProgressChange }) {
   }
 
   // ── Spaced repetition stats helper ───────────────────────────────────────
-  const nextDueDateLabel = revisionStats?.nextDueDate
-    ? new Date(revisionStats.nextDueDate + "T00:00:00").toLocaleDateString(
-        "en-US",
-        { month: "short", day: "numeric" },
-      )
-    : "—";
+  // Phase 36 Batch C: formatted via the shared revisionIntelligence
+  // formatter instead of an inline toLocaleDateString() call.
+  const nextDueDateLabel = summary.nextRevisionDateLabel;
 
   const STAT_PILLS = [
     {
@@ -258,13 +272,7 @@ export default function RevisionView({ activeExam, onProgressChange }) {
             </p>
             <p className="text-[11px] text-white/35 max-w-xs leading-relaxed">
               {revisionStats?.nextDueDate
-                ? `Your next scheduled revision is on ${new Date(
-                    revisionStats.nextDueDate + "T00:00:00",
-                  ).toLocaleDateString("en-US", {
-                    weekday: "long",
-                    month: "long",
-                    day: "numeric",
-                  })}.`
+                ? `Your next scheduled revision is on ${summary.nextRevisionDateFull}.`
                 : "Keep completing topics to grow your revision pipeline."}
             </p>
           </div>

@@ -12,7 +12,15 @@
  *   - No localStorage access
  *   - No side effects
  *   - All inputs passed by caller
+ *
+ * Phase 36 Batch C: the overdue/due-today interpretation of revisionQueue
+ * previously computed inline here (two separate .filter(i => i.isOverdue))
+ * now goes through the shared revisionIntelligence module, so this file
+ * no longer duplicates that classification logic. No behavioural change —
+ * same counts, same messages, same priority levels.
  */
+
+import { getOverdueCount, getDueTodayCount } from "./revisionIntelligence.js";
 
 // ─── PRIORITY LEVELS ──────────────────────────────────────────────────────────
 
@@ -87,22 +95,25 @@ function _daysBetween(dateA, dateB) {
  * 1. REVISION_DUE
  * Fired when the today-revision queue has overdue items.
  * Aggregated into ONE critical recommendation (not one per topic).
+ *
+ * Phase 36 Batch C: overdue/due-today counts now come from the shared
+ * revisionIntelligence module instead of being filtered inline.
  */
 function _genRevisionDue(revisionQueue) {
   try {
     if (!Array.isArray(revisionQueue) || revisionQueue.length === 0) return [];
 
-    const overdue = revisionQueue.filter((i) => i.isOverdue === true);
-    const due = revisionQueue.filter((i) => i.isOverdue === false);
+    const overdueCount = getOverdueCount(revisionQueue);
+    const dueTodayCount = getDueTodayCount(revisionQueue);
 
     const recs = [];
 
-    if (overdue.length > 0) {
+    if (overdueCount > 0) {
       recs.push({
         id: _makeId(REC_TYPE.REVISION_DUE, "overdue"),
         type: REC_TYPE.REVISION_DUE,
-        title: `${overdue.length} Overdue Revision${overdue.length > 1 ? "s" : ""}`,
-        message: `${overdue.length} topic${overdue.length > 1 ? "s are" : " is"} past their scheduled revision date. Clear these immediately before learning anything new — overdue reviews erode retention fast.`,
+        title: `${overdueCount} Overdue Revision${overdueCount > 1 ? "s" : ""}`,
+        message: `${overdueCount} topic${overdueCount > 1 ? "s are" : " is"} past their scheduled revision date. Clear these immediately before learning anything new — overdue reviews erode retention fast.`,
         priority: PRIORITY.CRITICAL,
         subjectId: null,
         subjectLabel: null,
@@ -113,12 +124,12 @@ function _genRevisionDue(revisionQueue) {
       });
     }
 
-    if (due.length > 0) {
+    if (dueTodayCount > 0) {
       recs.push({
         id: _makeId(REC_TYPE.REVISION_DUE, "due-today"),
         type: REC_TYPE.REVISION_DUE,
-        title: `${due.length} Revision${due.length > 1 ? "s" : ""} Scheduled Today`,
-        message: `${due.length} topic${due.length > 1 ? "s are" : " is"} due for spaced-repetition review today. Completing them advances retention and earns revision XP.`,
+        title: `${dueTodayCount} Revision${dueTodayCount > 1 ? "s" : ""} Scheduled Today`,
+        message: `${dueTodayCount} topic${dueTodayCount > 1 ? "s are" : " is"} due for spaced-repetition review today. Completing them advances retention and earns revision XP.`,
         priority: PRIORITY.HIGH,
         subjectId: null,
         subjectLabel: null,
