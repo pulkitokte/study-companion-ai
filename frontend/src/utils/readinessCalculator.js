@@ -9,6 +9,22 @@
  *   - No localStorage access
  *   - No side effects
  *   - All inputs passed by caller
+ *
+ * Phase 36 Batch B — Exam Readiness Reconciliation:
+ *   The revision component now accepts the real spaced-repetition
+ *   statistics already computed by syllabusService.getRevisionStats()
+ *   (via spacedRevisionEngine.getRevisionStats — the same source
+ *   Phase 36 Batch A's useRevisionQueue hook already exposes as `stats`).
+ *   No revision math is duplicated here — this file only converts the
+ *   already-computed { totalScheduled, overdueCount, ... } shape into a
+ *   0–100 component score, exactly as it previously converted
+ *   examProgress.revisionNeeded/done into one.
+ *
+ *   revisionStats is an OPTIONAL third parameter on every exported
+ *   function. If omitted (or not a valid object), each function falls
+ *   back to the original examProgress.revisionNeeded/done-based
+ *   calculation, so any caller not yet passing revisionStats keeps
+ *   working exactly as before (backward compatible).
  */
 
 // ─── GRADE TABLE ──────────────────────────────────────────────────────────────
@@ -83,9 +99,31 @@ function _masteryScore(examProgress) {
 /**
  * Revision backlog penalty score (0–100, higher = better).
  * No revision backlog → 100. Full backlog → 0.
- * Penalty is proportional to (revisionNeeded / done).
+ *
+ * Phase 36 Batch B: when real spaced-repetition stats are available
+ * (syllabusService.getRevisionStats() output), the backlog ratio is
+ * computed as overdueCount / totalScheduled — the actual fraction of
+ * scheduled revisions that are strictly past due. This directly reflects
+ * the learner's real spaced-repetition backlog: clearing an overdue
+ * revision (overdueCount ↓) improves the score, and a new revision
+ * falling overdue (overdueCount ↑) reduces it, exactly as expected.
+ *
+ * Falls back to the legacy revisionNeeded/done ratio when revisionStats
+ * is not supplied, preserving prior behaviour for any caller not yet
+ * passing it.
  */
-function _revisionScore(examProgress) {
+function _revisionScore(examProgress, revisionStats = null) {
+  if (revisionStats && typeof revisionStats === "object") {
+    const totalScheduled = revisionStats.totalScheduled ?? 0;
+    const overdueCount = revisionStats.overdueCount ?? 0;
+
+    if (totalScheduled === 0) return 100; // Nothing scheduled yet — no penalty
+
+    const backlogRatio = _clamp(overdueCount / totalScheduled, 0, 1);
+    return _clamp(100 - backlogRatio * 100);
+  }
+
+  // ── Legacy fallback (pre–Phase 36 behaviour) ──────────────────────────────
   const revisionNeeded = examProgress?.revisionNeeded ?? 0;
   const done = examProgress?.done ?? 0;
 
@@ -122,23 +160,28 @@ function _quizScore(quizStats) {
  *
  * Returns a composite readiness score 0–100.
  *
- * Weights (from spec):
+ * Weights (unchanged from spec):
  *   40% completion   → how much of the syllabus is done
  *   20% mastery      → how many topics are fully mastered
  *   20% revision     → how clean the revision backlog is
  *   20% quiz         → quiz accuracy (neutral if no data)
  *
- * @param {object} examProgress  - syllabusService.getExamProgress() output
- * @param {object|null} quizStats - { totalQuestions, correctAnswers } or null
+ * @param {object} examProgress          - syllabusService.getExamProgress() output
+ * @param {object|null} quizStats        - { totalQuestions, correctAnswers } or null
+ * @param {object|null} revisionStats    - syllabusService.getRevisionStats() output (Phase 36 Batch B); optional
  * @returns {number} integer 0–100
  */
-export function computeReadinessScore(examProgress, quizStats = null) {
+export function computeReadinessScore(
+  examProgress,
+  quizStats = null,
+  revisionStats = null,
+) {
   try {
     if (!examProgress || typeof examProgress !== "object") return 0;
 
     const completion = _completionScore(examProgress);
     const mastery = _masteryScore(examProgress);
-    const revision = _revisionScore(examProgress);
+    const revision = _revisionScore(examProgress, revisionStats);
     const quiz = _quizScore(quizStats);
 
     const raw = completion * 0.4 + mastery * 0.2 + revision * 0.2 + quiz * 0.2;
@@ -172,13 +215,18 @@ export function getReadinessGrade(score) {
  *
  * @param {object}      examProgress
  * @param {object|null} quizStats
+ * @param {object|null} revisionStats  syllabusService.getRevisionStats() output (Phase 36 Batch B); optional
  * @returns {object} { completion, mastery, revision, quiz, total }
  */
-export function getReadinessBreakdown(examProgress, quizStats = null) {
+export function getReadinessBreakdown(
+  examProgress,
+  quizStats = null,
+  revisionStats = null,
+) {
   try {
     const completion = _completionScore(examProgress);
     const mastery = _masteryScore(examProgress);
-    const revision = _revisionScore(examProgress);
+    const revision = _revisionScore(examProgress, revisionStats);
     const quiz = _quizScore(quizStats);
 
     return {
@@ -202,11 +250,16 @@ export function getReadinessBreakdown(examProgress, quizStats = null) {
  *
  * @param {object}      examProgress
  * @param {object|null} quizStats
+ * @param {object|null} revisionStats  syllabusService.getRevisionStats() output (Phase 36 Batch B); optional
  * @returns {string}
  */
-export function getReadinessRecommendation(examProgress, quizStats = null) {
+export function getReadinessRecommendation(
+  examProgress,
+  quizStats = null,
+  revisionStats = null,
+) {
   try {
-    const bd = getReadinessBreakdown(examProgress, quizStats);
+    const bd = getReadinessBreakdown(examProgress, quizStats, revisionStats);
 
     // Find the weakest weighted component
     const components = [
@@ -224,13 +277,21 @@ export function getReadinessRecommendation(examProgress, quizStats = null) {
 
     const pending = (examProgress?.total ?? 0) - (examProgress?.done ?? 0);
 
+    // Phase 36 Batch B: revision tip now reports the real overdue count
+    // from revisionStats when available, falling back to the legacy
+    // revisionNeeded status count otherwise.
+    const overdueForTip =
+      revisionStats && typeof revisionStats === "object"
+        ? (revisionStats.overdueCount ?? 0)
+        : (examProgress?.revisionNeeded ?? 0);
+
     const tips = {
       completion:
         pending > 0
           ? `${pending} topic${pending !== 1 ? "s" : ""} remaining — mark at least 2 topics done every day.`
           : "All topics covered — focus on revision and mastery.",
       mastery: `Only ${examProgress?.mastered ?? 0} topics mastered. After revising, push topics to Mastered for full XP.`,
-      revision: `${examProgress?.revisionNeeded ?? 0} topic${(examProgress?.revisionNeeded ?? 0) !== 1 ? "s" : ""} flagged for review. Clear your revision queue to strengthen your score.`,
+      revision: `${overdueForTip} topic${overdueForTip !== 1 ? "s" : ""} overdue for revision. Clear your revision queue to strengthen your score.`,
       quiz:
         bd.quiz < 50
           ? "Quiz accuracy is low. Practice with the Quiz Arena to reinforce what you have studied."

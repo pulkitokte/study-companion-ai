@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { TrendingUp } from "lucide-react";
 import {
@@ -104,27 +104,36 @@ function BreakdownRow({ label, score, weight, color }) {
  * No service calls. Fully prop-driven.
  *
  * Props:
- *   examProgress {object}      syllabusService.getExamProgress() result
- *   quizStats    {object|null} { totalQuestions, correctAnswers } or null
- *   examDef      {object}      getExam(activeExam) metadata
+ *   examProgress   {object}      syllabusService.getExamProgress() result
+ *   quizStats      {object|null} { totalQuestions, correctAnswers } or null
+ *   examDef        {object}      getExam(activeExam) metadata
+ *   revisionStats  {object|null} syllabusService.getRevisionStats() result
+ *                                (Phase 36 Batch B) — optional. When
+ *                                provided, the revision component of the
+ *                                readiness score reflects the real
+ *                                spaced-repetition backlog (overdue count
+ *                                vs. total scheduled) instead of the
+ *                                legacy revisionNeeded status count.
+ *                                Omitting it preserves prior behaviour.
  */
 export default function ExamReadinessCard({
   examProgress,
   quizStats,
   examDef,
+  revisionStats = null,
 }) {
   const score = useMemo(
-    () => computeReadinessScore(examProgress, quizStats),
-    [examProgress, quizStats],
+    () => computeReadinessScore(examProgress, quizStats, revisionStats),
+    [examProgress, quizStats, revisionStats],
   );
   const grade = useMemo(() => getReadinessGrade(score), [score]);
   const breakdown = useMemo(
-    () => getReadinessBreakdown(examProgress, quizStats),
-    [examProgress, quizStats],
+    () => getReadinessBreakdown(examProgress, quizStats, revisionStats),
+    [examProgress, quizStats, revisionStats],
   );
   const recommendation = useMemo(
-    () => getReadinessRecommendation(examProgress, quizStats),
-    [examProgress, quizStats],
+    () => getReadinessRecommendation(examProgress, quizStats, revisionStats),
+    [examProgress, quizStats, revisionStats],
   );
 
   const [expanded, setExpanded] = useState(false);
@@ -242,7 +251,3 @@ export default function ExamReadinessCard({
     </motion.div>
   );
 }
-
-// ── useState must be imported ─────────────────────────────────────────────────
-// (added here as a reminder — the import is at the top of the file)
-import { useState } from "react";
