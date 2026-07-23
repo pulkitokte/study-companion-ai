@@ -18,9 +18,18 @@
  * now goes through the shared revisionIntelligence module, so this file
  * no longer duplicates that classification logic. No behavioural change —
  * same counts, same messages, same priority levels.
+ *
+ * Phase 36 Batch D: final ordering of the deduplicated recommendation
+ * list now goes through the shared recommendationPrioritization module
+ * instead of a static priority-tier + title sort computed inline. Tier
+ * ordering (CRITICAL → HIGH → MEDIUM → POSITIVE) is preserved exactly —
+ * the shared module only adds deterministic secondary signals to break
+ * ties within a tier. Recommendation generation (types, messages,
+ * priority assignment) is completely unchanged.
  */
 
 import { getOverdueCount, getDueTodayCount } from "./revisionIntelligence.js";
+import { prioritizeRecommendations } from "./recommendationPrioritization.js";
 
 // ─── PRIORITY LEVELS ──────────────────────────────────────────────────────────
 
@@ -43,13 +52,6 @@ export const PRIORITY_LABELS = {
   [PRIORITY.HIGH]: "High Priority",
   [PRIORITY.MEDIUM]: "Medium Priority",
   [PRIORITY.POSITIVE]: "Positive Insight",
-};
-
-const PRIORITY_SORT_ORDER = {
-  [PRIORITY.CRITICAL]: 0,
-  [PRIORITY.HIGH]: 1,
-  [PRIORITY.MEDIUM]: 2,
-  [PRIORITY.POSITIVE]: 3,
 };
 
 // ─── RECOMMENDATION TYPES ─────────────────────────────────────────────────────
@@ -333,8 +335,15 @@ function _genMomentum(subjectProgress, gapItems) {
 /**
  * generateRecommendations
  *
- * Main entry point. Runs all generators and returns a deduplicated,
- * priority-sorted recommendation list.
+ * Main entry point. Runs all generators, deduplicates, and returns a
+ * deterministically ranked recommendation list.
+ *
+ * Phase 36 Batch D: final ordering now goes through
+ * recommendationPrioritization.prioritizeRecommendations(), which
+ * preserves the exact CRITICAL → HIGH → MEDIUM → POSITIVE tier ordering
+ * this function always produced, while adding deterministic secondary
+ * signals (revision urgency, subject completion, neglect duration) to
+ * break ties within a tier more intelligently than a plain title sort.
  *
  * @param {object} inputs
  *   {
@@ -373,17 +382,13 @@ export function generateRecommendations({
       return true;
     });
 
-    // Sort: Critical → High → Medium → Positive
-    // Within same priority: by actionLabel alphabetically for stability
-    deduped.sort((a, b) => {
-      const orderDiff =
-        (PRIORITY_SORT_ORDER[a.priority] ?? 99) -
-        (PRIORITY_SORT_ORDER[b.priority] ?? 99);
-      if (orderDiff !== 0) return orderDiff;
-      return (a.title ?? "").localeCompare(b.title ?? "");
+    // Phase 36 Batch D: deterministic ranking via the shared prioritization
+    // layer, replacing the previous inline PRIORITY_SORT_ORDER + title sort.
+    return prioritizeRecommendations(deduped, {
+      subjectProgress,
+      activityLog,
+      revisionQueue,
     });
-
-    return deduped;
   } catch {
     return [];
   }
