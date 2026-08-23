@@ -26,43 +26,33 @@
  * the shared module only adds deterministic secondary signals to break
  * ties within a tier. Recommendation generation (types, messages,
  * priority assignment) is completely unchanged.
+ *
+ * Phase 37 Batch E.1 Hotfix: PRIORITY, PRIORITY_COLORS, PRIORITY_LABELS,
+ * and REC_TYPE now live in recommendationConstants.js (a dependency-
+ * neutral leaf module) rather than being declared directly in this file.
+ * This breaks a circular import with recommendationPrioritization.js,
+ * which previously imported these constants back from this file while
+ * this file imported prioritizeRecommendations from it. All four
+ * constants are re-exported below for full backward compatibility —
+ * no existing consumer's import statement needs to change.
  */
 
+import {
+  PRIORITY,
+  PRIORITY_COLORS,
+  PRIORITY_LABELS,
+  REC_TYPE,
+} from "./recommendationConstants.js";
 import { getOverdueCount, getDueTodayCount } from "./revisionIntelligence.js";
 import { prioritizeRecommendations } from "./recommendationPrioritization.js";
 
-// ─── PRIORITY LEVELS ──────────────────────────────────────────────────────────
-
-export const PRIORITY = {
-  CRITICAL: "CRITICAL",
-  HIGH: "HIGH",
-  MEDIUM: "MEDIUM",
-  POSITIVE: "POSITIVE",
-};
-
-export const PRIORITY_COLORS = {
-  [PRIORITY.CRITICAL]: "#FF4D6D",
-  [PRIORITY.HIGH]: "#FF8C42",
-  [PRIORITY.MEDIUM]: "#FFD166",
-  [PRIORITY.POSITIVE]: "#00FFC8",
-};
-
-export const PRIORITY_LABELS = {
-  [PRIORITY.CRITICAL]: "Critical",
-  [PRIORITY.HIGH]: "High Priority",
-  [PRIORITY.MEDIUM]: "Medium Priority",
-  [PRIORITY.POSITIVE]: "Positive Insight",
-};
-
-// ─── RECOMMENDATION TYPES ─────────────────────────────────────────────────────
-
-export const REC_TYPE = {
-  REVISION_DUE: "REVISION_DUE",
-  HIGH_RISK_SUBJECT: "HIGH_RISK_SUBJECT",
-  NEGLECTED_SUBJECT: "NEGLECTED_SUBJECT",
-  LOW_COMPLETION: "LOW_COMPLETION",
-  MOMENTUM: "MOMENTUM",
-};
+// ─── RE-EXPORTS (backward compatibility) ─────────────────────────────────────
+// PRIORITY, PRIORITY_COLORS, PRIORITY_LABELS, and REC_TYPE now originate in
+// recommendationConstants.js (see Phase 37 Batch E.1 Hotfix note above).
+// Re-exported here unchanged so every existing `import { PRIORITY } from
+// "./studyRecommendationEngine.js"` (or REC_TYPE / PRIORITY_COLORS /
+// PRIORITY_LABELS) continues to work exactly as before.
+export { PRIORITY, PRIORITY_COLORS, PRIORITY_LABELS, REC_TYPE };
 
 // ─── PRIVATE HELPERS ─────────────────────────────────────────────────────────
 

@@ -2,50 +2,148 @@ import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { Command } from "lucide-react";
 import {
-  buildDashboardMission,
   buildTodayProgress,
   buildFocusScore,
 } from "../../utils/dashboardMissionEngine.js";
+import { useStudyPlan } from "../../hooks/useStudyPlan.js";
+import syllabusService from "../../services/syllabusService.js";
 import MissionCard from "./MissionCard.jsx";
 import TodayProgressCard from "./TodayProgressCard.jsx";
 import QuickActionsCard from "./QuickActionsCard.jsx";
 import FocusMeterCard from "./FocusMeterCard.jsx";
 
 /**
+ * Phase 37 Batch E.2 — Command Center Migration to Unified Study Plan
+ *
+ * The "what should I study now?" mission decision is now sourced from
+ * useStudyPlan(examId).topPriorityItem — the canonical orchestration
+ * result of studyRecommendationEngine → recommendationPrioritization →
+ * studyPlanEngine (with the Phase 37 Batch E.1 revision-precedence
+ * reconciliation already applied inside recommendationPrioritization.js).
+ *
+ * dashboardMissionEngine.buildDashboardMission() is no longer called by
+ * this component. dashboardMissionEngine.js itself is untouched and
+ * remains available as a legacy path per Batch E.2 instructions —
+ * buildTodayProgress()/buildFocusScore() (Today Progress / Focus Meter,
+ * which are NOT part of the Study Plan's responsibility) are still
+ * imported and used exactly as before.
+ *
+ * ADAPTER: _adaptPlanItemToMission() below exists purely for presentation
+ * compatibility with the existing MissionCard component — it performs no
+ * recommendation logic, ranking, or scoring of its own. It only renames/
+ * reshapes fields already computed by studyPlanEngine into the shape
+ * MissionCard has always consumed.
+ */
+
+// ─── PRESENTATION-ONLY FALLBACK ────────────────────────────────────────────
+// Mirrors the shape (not the logic) of studyPlanEngine's own internal
+// FALLBACK_ITEM / dashboardMissionEngine's legacy FALLBACK, so MissionCard
+// always has a safe, non-null mission to render — including on the very
+// first render before useStudyPlan's initial build completes.
+const FALLBACK_MISSION = {
+  emoji: "📘",
+  title: "Start Your Study Session",
+  explanation: "Open your syllabus and mark the first topic for today.",
+  ctaLabel: "Open Syllabus",
+  actionPath: "/syllabus",
+  actionTab: "overview",
+  urgencyLevel: "medium",
+  color: "#7C6FFF",
+};
+
+/**
+ * _adaptPlanItemToMission
+ *
+ * Presentation-only adapter — maps a studyPlanEngine PlanItem
+ * (icon/title/description/actionLabel/actionPath/actionTab/urgencyLevel/color)
+ * into the exact mission shape MissionCard already renders
+ * (emoji/title/explanation/ctaLabel/actionPath/actionTab/urgencyLevel/color).
+ * No recommendation selection, ranking, or scoring occurs here — every
+ * field is taken verbatim from the already-resolved plan item.
+ */
+function _adaptPlanItemToMission(item) {
+  if (!item) return FALLBACK_MISSION;
+
+  return {
+    emoji: item.icon ?? FALLBACK_MISSION.emoji,
+    title: item.title || FALLBACK_MISSION.title,
+    explanation: item.description || FALLBACK_MISSION.explanation,
+    ctaLabel: item.actionLabel || FALLBACK_MISSION.ctaLabel,
+    actionPath: item.actionPath || FALLBACK_MISSION.actionPath,
+    actionTab: item.actionTab ?? FALLBACK_MISSION.actionTab,
+    urgencyLevel: (
+      item.urgencyLevel ?? FALLBACK_MISSION.urgencyLevel
+    ).toLowerCase(),
+    color: item.color ?? FALLBACK_MISSION.color,
+  };
+}
+
+/**
  * CommandCenter
  *
  * Central composition component for the Dashboard Command Center.
- * Orchestrates all four cards and the pure engine functions.
- * Fully prop-driven — no service calls.
+ * Orchestrates all four cards. Today Progress and Focus Meter remain
+ * fully prop-driven (unrelated to the Study Plan). The mission card is
+ * now powered by useStudyPlan(examId) internally.
  *
  * Props:
  *   revisionQueue    {Array}   syllabusService.getTodayRevisionQueue(examId)
- *   recommendations  {Array}   generateRecommendations({...}) output
+ *                               — still used by Focus Meter's revision
+ *                               component; no longer used for mission
+ *                               selection (useStudyPlan sources its own
+ *                               revision queue via useRevisionQueue).
+ *   recommendations  {Array}   agent-pipeline recommendations (lib/recommendationEngine.js)
+ *                               — no longer consumed here; the canonical
+ *                               studyRecommendationEngine pipeline (via
+ *                               useStudyPlan) is now the sole mission
+ *                               authority, per the Phase 37 architecture
+ *                               reconciliation. Retained as an accepted
+ *                               prop for backward compatibility with
+ *                               Dashboard.jsx, which is left unmodified.
  *   subjectProgress  {Array}   syllabusService.getAllSubjectProgress(examId)
+ *                               — no longer used directly here (useStudyPlan
+ *                               fetches its own copy internally); retained
+ *                               as an accepted prop for the same reason.
  *   examProgress     {object}  syllabusService.getExamProgress(examId)
+ *                               — no longer used directly here for the same
+ *                               reason; retained as an accepted prop.
  *   activityLog      {Array}   syllabusService.getActivityLog(500)
+ *                               — still used by Today Progress and Focus
+ *                               Meter; unrelated to the migrated mission.
  *   onNavigate       {function} (path: string, tab?: string) => void
  */
 export default function CommandCenter({
   revisionQueue = [],
-  recommendations = [],
-  subjectProgress = [],
-  examProgress = null,
+  subjectProgress: _subjectProgress = [],
+  examProgress: _examProgress = null,
   activityLog = [],
   onNavigate,
 }) {
-  // ── Pure engine calls — all useMemo so they only recompute on prop change
+  // ── Active exam — reused via the same lightweight pattern Dashboard.jsx
+  // already uses for its own activeExam (syllabusService.getActiveExam()),
+  // rather than introducing a new prop chain or context. ──────────────────
+  const examId = useMemo(() => {
+    try {
+      return syllabusService.getActiveExam();
+    } catch {
+      return "upsc";
+    }
+  }, []);
+
+  // ── Phase 37 Batch E.2: the Unified Study Plan is now the sole source
+  // of the mission decision. useStudyPlan already reuses useRevisionQueue
+  // + useSyllabusSyncListener internally — no new sync mechanism is added
+  // here, and the plan refreshes automatically through that existing
+  // architecture. ───────────────────────────────────────────────────────
+  const { topPriorityItem, loading: planLoading } = useStudyPlan(examId);
+
   const mission = useMemo(
-    () =>
-      buildDashboardMission({
-        revisionQueue,
-        recommendations,
-        subjectProgress,
-        examProgress,
-      }),
-    [revisionQueue, recommendations, subjectProgress, examProgress],
+    () => _adaptPlanItemToMission(topPriorityItem),
+    [topPriorityItem],
   );
 
+  // ── Today Progress / Focus Meter — unrelated to the Study Plan,
+  // unchanged from before this migration. ──────────────────────────────
   const todayProgress = useMemo(
     () => buildTodayProgress(activityLog),
     [activityLog],
@@ -88,7 +186,11 @@ export default function CommandCenter({
       {/* Row 1: Mission (full width on mobile, 2/3 on larger) + Focus Meter */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="sm:col-span-2">
-          <MissionCard mission={mission} onAction={handleMissionAction} />
+          <MissionCard
+            mission={mission}
+            onAction={handleMissionAction}
+            loading={planLoading}
+          />
         </div>
         <div className="sm:col-span-1">
           <FocusMeterCard focusScore={focusScore} />
