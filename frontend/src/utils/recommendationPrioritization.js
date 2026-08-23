@@ -14,6 +14,35 @@
  * completion, and neglect duration — so recommendations that are more
  * urgent within the same tier surface first.
  *
+ * Phase 37 Batch E — Priority Authority Reconciliation:
+ *   During the first Command Center migration to the Unified Study Plan
+ *   (studyPlanEngine.js / useStudyPlan.js), a genuine ordering conflict
+ *   was discovered between this module's HIGH-tier secondary scoring and
+ *   the legacy dashboardMissionEngine ladder, which always placed
+ *   due-today revisions ahead of ordinary HIGH-tier diagnostic
+ *   recommendations (HIGH_RISK_SUBJECT, NEGLECTED_SUBJECT). A single
+ *   due-today revision item could previously be outranked within the
+ *   HIGH tier by a sufficiently neglected subject, contradicting that
+ *   established precedent.
+ *
+ *   This module is the canonical, single source of recommendation
+ *   priority — per Phase 37's architecture freeze, the resolution lives
+ *   here (not in CommandCenter, useStudyPlan, or studyPlanEngine).
+ *
+ *   Resolution: revision-derived recommendation types now receive an
+ *   explicit, bounded type-precedence bonus within their own priority
+ *   tier (see TYPE_PRECEDENCE_BONUS below), formalizing the precedence
+ *   revision urgency already had in the legacy dashboardMissionEngine
+ *   ladder and in generateRecommendations()'s generator ordering
+ *   (_genRevisionDue runs first). The bonus is strictly smaller than the
+ *   gap between adjacent tiers, so it can only ever reorder items WITHIN
+ *   a tier — it can never let a HIGH-tier item outrank a CRITICAL-tier
+ *   item, or a MEDIUM-tier item outrank a HIGH-tier item. Tier ordering
+ *   itself (CRITICAL → HIGH → MEDIUM → POSITIVE) is unchanged, and
+ *   overdue revisions (already CRITICAL) already unconditionally
+ *   outranked every HIGH-tier item before this change — no adjustment
+ *   was needed or made for that case.
+ *
  * CONSTRAINTS:
  *   - No React, no JSX, no hooks
  *   - No service calls, no localStorage access, no side effects
@@ -24,7 +53,8 @@
  *   - Never throws — all functions are fully defensive
  *   - Recommendation objects are returned unchanged (same shape) — only
  *     their order changes. Fully compatible with existing consumers
- *     (RecommendationView, dashboardMissionEngine's `.find(...)` lookups).
+ *     (RecommendationView, dashboardMissionEngine's `.find(...)` lookups,
+ *     and studyPlanEngine's item mapping).
  *
  * FUTURE-COMPATIBILITY:
  *   A future AI ranking engine only needs to replace
@@ -45,6 +75,27 @@ const TIER_BASE_SCORE = {
   [PRIORITY.HIGH]: 750,
   [PRIORITY.MEDIUM]: 500,
   [PRIORITY.POSITIVE]: 100,
+};
+
+// ─── TYPE PRECEDENCE BONUS (Phase 37 Batch E) ────────────────────────────────
+// Formalizes revision urgency's existing precedence (already established
+// by dashboardMissionEngine's legacy ladder and by _genRevisionDue running
+// first in generateRecommendations()) as an explicit, bounded score
+// component. Only REVISION_DUE currently carries a precedence bonus, since
+// it is the only recommendation type with a documented existing precedent
+// for outranking ordinary diagnostic recommendations within the same tier.
+//
+// Bound justification: within the HIGH tier, the largest possible bonus
+// from any OTHER type's own signal is NEGLECTED_SUBJECT's neglect bonus,
+// capped at 40 (see _neglectBonus). TYPE_PRECEDENCE_BONUS.REVISION_DUE is
+// set to 50 — strictly greater than that maximum — so a REVISION_DUE item
+// always outranks any other HIGH-tier item regardless of how large that
+// other item's own signal happens to be, while the combined maximum for a
+// HIGH-tier REVISION_DUE item (750 base + 50 precedence + 60 urgency = 860)
+// remains well below the CRITICAL tier floor (1000), so tier separation is
+// never crossed.
+const TYPE_PRECEDENCE_BONUS = {
+  [REC_TYPE.REVISION_DUE]: 50,
 };
 
 // ─── PRIVATE HELPERS ─────────────────────────────────────────────────────────
@@ -82,6 +133,16 @@ function _daysSinceSubjectActivity(activityLog, subjectId) {
     }
   }
   return 0;
+}
+
+/**
+ * Type precedence bonus (Phase 37 Batch E). Applies uniformly whenever a
+ * recommendation's type has a documented precedence entry — currently
+ * only REVISION_DUE. Deterministic and independent of tier, so it
+ * composes safely with TIER_BASE_SCORE and every other signal below.
+ */
+function _typePrecedenceBonus(rec) {
+  return TYPE_PRECEDENCE_BONUS[rec?.type] ?? 0;
 }
 
 /**
@@ -158,7 +219,8 @@ function _neglectBonus(rec, activityLog) {
  *
  * Returns a single deterministic numeric score for one recommendation.
  * Higher = more important. Tier (rec.priority) is always the dominant
- * factor; the additional signals only fine-tune ordering within a tier.
+ * factor; the type-precedence bonus and additional signals only fine-tune
+ * ordering within a tier.
  *
  * @param {object} rec      a single recommendation object from
  *                          studyRecommendationEngine.generateRecommendations()
@@ -181,11 +243,12 @@ export function getRecommendationScore(rec, context = {}) {
     } = context;
 
     const base = TIER_BASE_SCORE[rec.priority] ?? 0;
+    const typePrecedence = _typePrecedenceBonus(rec);
     const revisionBonus = _revisionUrgencyBonus(rec, revisionQueue);
     const subjectBonus = _subjectCompletionBonus(rec, subjectProgress);
     const neglect = _neglectBonus(rec, activityLog);
 
-    return base + revisionBonus + subjectBonus + neglect;
+    return base + typePrecedence + revisionBonus + subjectBonus + neglect;
   } catch {
     return TIER_BASE_SCORE[rec?.priority] ?? 0;
   }
