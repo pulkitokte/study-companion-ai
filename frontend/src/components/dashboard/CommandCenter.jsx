@@ -19,11 +19,13 @@ import FocusMeterCard from "./FocusMeterCard.jsx";
  * useStudyPlan(examId).topPriorityItem — the canonical orchestration
  * result of studyRecommendationEngine → recommendationPrioritization →
  * studyPlanEngine (with the Phase 37 Batch E.1 revision-precedence
- * reconciliation already applied inside recommendationPrioritization.js).
+ * reconciliation already applied inside recommendationPrioritization.js,
+ * and the Phase 37 Batch E.1 Hotfix circular-dependency fix applied via
+ * recommendationConstants.js — both fully transparent to this component).
  *
  * dashboardMissionEngine.buildDashboardMission() is no longer called by
  * this component. dashboardMissionEngine.js itself is untouched and
- * remains available as a legacy path per Batch E.2 instructions —
+ * remains available as a legacy path per this batch's instructions —
  * buildTodayProgress()/buildFocusScore() (Today Progress / Focus Meter,
  * which are NOT part of the Study Plan's responsibility) are still
  * imported and used exactly as before.
@@ -39,7 +41,9 @@ import FocusMeterCard from "./FocusMeterCard.jsx";
 // Mirrors the shape (not the logic) of studyPlanEngine's own internal
 // FALLBACK_ITEM / dashboardMissionEngine's legacy FALLBACK, so MissionCard
 // always has a safe, non-null mission to render — including on the very
-// first render before useStudyPlan's initial build completes.
+// first render before useStudyPlan's initial build completes, and safely
+// covering "no active exam" / "empty plan" / "topPriorityItem is null"
+// cases without fabricating a recommendation.
 const FALLBACK_MISSION = {
   emoji: "📘",
   title: "Start Your Study Session",
