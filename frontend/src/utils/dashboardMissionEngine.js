@@ -11,20 +11,33 @@
  *   - All inputs passed by caller
  *
  * DATA SOURCES (all passed as arguments by the caller):
- *   revisionQueue    syllabusService.getTodayRevisionQueue(examId)
- *   recommendations  generateRecommendations({...})
- *   subjectProgress  syllabusService.getAllSubjectProgress(examId)
- *   examProgress     syllabusService.getExamProgress(examId)
  *   activityLog      syllabusService.getActivityLog(500)
  *
  * Phase 36 Batch C: the overdue/due-today interpretation of revisionQueue
- * previously computed inline here (two separate .filter(i => i.isOverdue))
- * now goes through the shared revisionIntelligence module, so this file
- * no longer duplicates that classification logic. No behavioural change —
- * same counts, same messages, same priority ladder.
+ * previously computed inline in buildDashboardMission (two separate
+ * .filter(i => i.isOverdue)) went through the shared revisionIntelligence
+ * module before this function's removal, so that classification logic no
+ * longer lived here duplicated.
+ *
+ * Phase 37 Batch E.2: CommandCenter migrated its primary "what should I
+ * study now?" mission decision to useStudyPlan(examId) / studyPlanEngine,
+ * which orchestrates studyRecommendationEngine + recommendationPrioritization
+ * (the canonical priority authority per the Phase 37 architecture freeze).
+ *
+ * Phase 37 Batch E.3 — Legacy Dashboard Mission Cleanup:
+ *   buildDashboardMission() has been REMOVED after a conservative audit
+ *   confirmed zero remaining callers across every file transferred
+ *   throughout this project's session history — its sole call site was
+ *   CommandCenter.jsx, which no longer imports or calls it as of the
+ *   Batch E.2 migration. Its exclusive fallback constant (FALLBACK) was
+ *   removed alongside it. buildTodayProgress() and buildFocusScore()
+ *   remain fully intact, unchanged, and continue to power the Dashboard
+ *   Command Center's Today Progress and Focus Meter cards — every helper
+ *   and constant they depend on (_todayLocalStr, _timestampToLocalDate,
+ *   _clamp, _todayEntries, MS_PER_DAY, TODAY_XP_GOAL, the FOCUS_WEIGHT_*
+ *   constants) is preserved exactly as it was, since none of them were
+ *   exclusive to the removed function.
  */
-
-import { getOverdueCount, getDueTodayCount } from "./revisionIntelligence.js";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
@@ -72,167 +85,6 @@ function _todayEntries(activityLog) {
   return activityLog.filter(
     (e) => _timestampToLocalDate(e.timestamp) === today,
   );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// EXPORTED: buildDashboardMission
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * buildDashboardMission
- *
- * Returns a SINGLE mission object — the single most important action
- * the user should take right now.
- *
- * Priority ladder (highest → lowest):
- *   1. Overdue revisions
- *   2. Due-today revisions
- *   3. Critical recommendation (priority === 'CRITICAL')
- *   4. High recommendation (priority === 'HIGH')
- *   5. Continue weakest subject (lowest completion pct, has progress)
- *   6. Continue current syllabus (next untouched subject)
- *
- * @param {object} inputs
- *   {
- *     revisionQueue    {Array}  syllabusService.getTodayRevisionQueue()
- *     recommendations  {Array}  generateRecommendations() output
- *     subjectProgress  {Array}  getAllSubjectProgress()
- *     examProgress     {object} getExamProgress()
- *   }
- * @returns {object} mission:
- *   {
- *     emoji, title, explanation, ctaLabel,
- *     actionPath, actionTab,
- *     urgencyLevel,   // 'critical' | 'high' | 'medium' | 'positive'
- *     color,
- *   }
- */
-export function buildDashboardMission({
-  revisionQueue = [],
-  recommendations = [],
-  subjectProgress = [],
-  examProgress = null,
-} = {}) {
-  const FALLBACK = {
-    emoji: "📘",
-    title: "Start Your Study Session",
-    explanation: "Open your syllabus and mark the first topic for today.",
-    ctaLabel: "Open Syllabus",
-    actionPath: "/syllabus",
-    actionTab: "overview",
-    urgencyLevel: "medium",
-    color: "#7C6FFF",
-  };
-
-  try {
-    // ── 1. Overdue revisions ────────────────────────────────────────────────
-    const overdueCount = getOverdueCount(revisionQueue);
-
-    if (overdueCount > 0) {
-      return {
-        emoji: "🔥",
-        title: `Clear ${overdueCount} Overdue Revision${overdueCount > 1 ? "s" : ""}`,
-        explanation: `${overdueCount} topic${overdueCount > 1 ? "s are" : " is"} past the scheduled revision date. Reviewing now preserves long-term retention.`,
-        ctaLabel: "Start Revision",
-        actionPath: "/syllabus",
-        actionTab: "revision",
-        urgencyLevel: "critical",
-        color: "#FF4D6D",
-      };
-    }
-
-    // ── 2. Due-today revisions ──────────────────────────────────────────────
-    const dueTodayCount = getDueTodayCount(revisionQueue);
-
-    if (dueTodayCount > 0) {
-      return {
-        emoji: "📅",
-        title: `Finish Today's ${dueTodayCount} Revision${dueTodayCount > 1 ? "s" : ""}`,
-        explanation: `${dueTodayCount} spaced-repetition revision${dueTodayCount > 1 ? "s are" : " is"} scheduled for today. Completing them advances each topic's retention level.`,
-        ctaLabel: "Today's Revisions",
-        actionPath: "/syllabus",
-        actionTab: "revision",
-        urgencyLevel: "high",
-        color: "#FF8C42",
-      };
-    }
-
-    // ── 3. Critical recommendation ─────────────────────────────────────────
-    if (Array.isArray(recommendations)) {
-      const critical = recommendations.find((r) => r.priority === "CRITICAL");
-      if (critical) {
-        return {
-          emoji: critical.icon ?? "⚠️",
-          title: critical.title,
-          explanation: critical.message,
-          ctaLabel: critical.actionLabel ?? "Take Action",
-          actionPath: critical.actionPath ?? "/syllabus",
-          actionTab: "recommendations",
-          urgencyLevel: "critical",
-          color: "#FF4D6D",
-        };
-      }
-
-      // ── 4. High recommendation ─────────────────────────────────────────────
-      const high = recommendations.find((r) => r.priority === "HIGH");
-      if (high) {
-        return {
-          emoji: high.icon ?? "⚠️",
-          title: high.title,
-          explanation: high.message,
-          ctaLabel: high.actionLabel ?? "Address Now",
-          actionPath: high.actionPath ?? "/syllabus",
-          actionTab: "recommendations",
-          urgencyLevel: "high",
-          color: "#FF8C42",
-        };
-      }
-    }
-
-    // ── 5. Continue weakest subject ────────────────────────────────────────
-    if (Array.isArray(subjectProgress)) {
-      const started = subjectProgress
-        .filter(
-          (s) => (s.progress?.done ?? 0) > 0 && (s.progress?.pct ?? 0) < 100,
-        )
-        .sort((a, b) => (a.progress?.pct ?? 0) - (b.progress?.pct ?? 0));
-
-      if (started.length > 0) {
-        const weakest = started[0];
-        return {
-          emoji: weakest.emoji ?? "📘",
-          title: `Improve ${weakest.label}`,
-          explanation: `${weakest.label} is ${weakest.progress?.pct ?? 0}% complete. Consistent daily effort here will close the gap steadily.`,
-          ctaLabel: "Continue Subject",
-          actionPath: "/syllabus",
-          actionTab: "overview",
-          urgencyLevel: "medium",
-          color: weakest.color ?? "#7C6FFF",
-        };
-      }
-
-      // ── 6. Continue current syllabus (untouched subjects) ─────────────────
-      const untouched = subjectProgress.find(
-        (s) => (s.progress?.done ?? 0) === 0,
-      );
-      if (untouched) {
-        return {
-          emoji: untouched.emoji ?? "📘",
-          title: `Start ${untouched.label}`,
-          explanation: `You haven't begun ${untouched.label} yet. Marking even one topic done activates tracking and revision scheduling.`,
-          ctaLabel: "Open Syllabus",
-          actionPath: "/syllabus",
-          actionTab: "overview",
-          urgencyLevel: "medium",
-          color: untouched.color ?? "#7C6FFF",
-        };
-      }
-    }
-
-    return FALLBACK;
-  } catch {
-    return FALLBACK;
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -323,11 +175,6 @@ export function buildTodayProgress(activityLog = []) {
  *   Topics completed   30%  — scaled to a target of 5 topics/day
  *   Revisions done     20%  — scaled to pending revision count (min 1)
  *   Consistency        15%  — whether any activity happened in last 3 days
- *
- * NOTE: Phase 36 Batch C intentionally leaves this function untouched.
- * It takes pendingRevisionCount as a plain scalar (not a revisionQueue
- * array to interpret), so there is no overdue/urgency classification
- * here to consolidate.
  *
  * @param {object} todayProgress  output of buildTodayProgress()
  * @param {Array}  activityLog    syllabusService.getActivityLog(500)
@@ -432,7 +279,6 @@ export function buildFocusScore(
 }
 
 export default {
-  buildDashboardMission,
   buildTodayProgress,
   buildFocusScore,
 };
