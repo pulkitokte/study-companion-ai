@@ -11,6 +11,13 @@ import {
 } from "../lib/analyticsEngine.js";
 import { addMemoryEntry } from "../lib/agentMemory.js";
 import syllabusService from "../services/syllabusService.js";
+import { getQuizHistory } from "../utils/quizStorage.js";
+import { analyzeKnowledgeGaps } from "../utils/gapAnalysisEngine.js";
+import {
+  generateRecommendations,
+  REC_TYPE,
+} from "../utils/studyRecommendationEngine.js";
+import { getRecommendationScore } from "../utils/recommendationPrioritization.js";
 
 // ─── LEARNING ANALYSIS ────────────────────────────────────────────────────────
 function analyzeLearning(stats = null) {
@@ -164,7 +171,107 @@ function getRecommendations(stats = null) {
   }));
 }
 
-// ─── SYLLABUS RECOMMENDATIONS (Batch 9) ───────────────────────────────────────
+// ─── PHASE 37 BATCH F.1: CANONICAL RECOMMENDATION ADAPTER ────────────────────
+
+/**
+ * _adaptCanonicalRecommendation
+ *
+ * Presentation-only adapter — maps a recommendation object produced by
+ * studyRecommendationEngine.generateRecommendations() (already ranked by
+ * recommendationPrioritization) into the existing StudyCoachAgent feed
+ * shape { agent, title, description, category, priority, icon, color, action }.
+ *
+ * Performs NO recommendation generation, scoring, or ranking of its own.
+ * `priority` is taken from recommendationPrioritization.getRecommendationScore()
+ * — the same canonical, already-established scoring API every other
+ * consumer of the recommendation pipeline relies on — never invented here.
+ *
+ * @param {object} rec      a single canonical recommendation object
+ * @param {object} context  { subjectProgress, activityLog, revisionQueue } —
+ *                          same context shape getRecommendationScore expects
+ * @param {string} category agent-feed category label (e.g. "revision", "syllabus")
+ * @returns {object} agent-feed shaped recommendation
+ */
+function _adaptCanonicalRecommendation(rec, context, category) {
+  return {
+    agent: "coach",
+    title: rec.title,
+    description: rec.message,
+    category,
+    priority: Math.round(getRecommendationScore(rec, context)),
+    icon: rec.icon,
+    color: rec.color,
+    action: { label: rec.actionLabel, path: rec.actionPath },
+  };
+}
+
+/**
+ * _buildAlmostDoneRecommendation
+ *
+ * "Almost Done" has no canonical recommendation-type equivalent in
+ * studyRecommendationEngine — it is preserved here as an explicitly
+ * agent-specific, positive-framing nudge (per Phase 37 Batch F.1
+ * instructions: not deleted, not silently merged into MOMENTUM).
+ *
+ * Its priority (79) is a fixed agent-presentation value, not a canonical
+ * score — it does not compete with or attempt to replicate canonical
+ * ranking, since no canonical type exists for this concept to score
+ * against.
+ *
+ * @param {Array} subjects  syllabusService.getAllSubjectProgress(examId)
+ * @returns {object|null}
+ */
+function _buildAlmostDoneRecommendation(subjects) {
+  try {
+    const almostDone = subjects
+      .filter(
+        (s) => (s.progress?.pct ?? 0) >= 80 && (s.progress?.pct ?? 0) < 100,
+      )
+      .sort((a, b) => (b.progress.pct ?? 0) - (a.progress.pct ?? 0));
+
+    if (almostDone.length === 0) return null;
+
+    const top = almostDone[0];
+    const remaining = (top.progress.total ?? 0) - (top.progress.done ?? 0);
+
+    return {
+      agent: "coach",
+      title: `Almost Done: ${top.label}`,
+      description: `${top.label} is ${top.progress.pct}% complete — only ${remaining} topic${remaining > 1 ? "s" : ""} left. Finishing it unlocks a +200 XP subject completion bonus.`,
+      category: "syllabus",
+      priority: 79,
+      icon: top.emoji ?? "🎯",
+      color: top.color ?? "#00FFC8",
+      action: { label: "Finish Subject", path: "/syllabus" },
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ─── SYLLABUS RECOMMENDATIONS (Batch 9, migrated Phase 37 Batch F.1) ─────────
+
+/**
+ * getSyllabusRecommendations
+ *
+ * Phase 37 Batch F.1: HIGH_RISK_SUBJECT / NEGLECTED_SUBJECT /
+ * LOW_COMPLETION / MOMENTUM recommendations now delegate entirely to
+ * studyRecommendationEngine.generateRecommendations() (canonical
+ * pipeline), rather than being independently reimplemented with
+ * different thresholds and the legacy progress.revisionNeeded signal.
+ *
+ * The former "Review Queue" (revision-flagged subjects, using the legacy
+ * revisionNeeded status count) has been removed — that territory is
+ * already canonically and correctly covered by
+ * getSpacedRevisionRecommendations()'s REVISION_DUE delegation, so
+ * reimplementing it here would itself be duplication.
+ *
+ * "Almost Done" has no canonical equivalent and is preserved as an
+ * explicitly agent-specific recommendation via _buildAlmostDoneRecommendation().
+ *
+ * The "no progress at all" onboarding nudge is preserved unchanged — it
+ * is agent-specific presentation with no canonical equivalent.
+ */
 function getSyllabusRecommendations() {
   try {
     const examId = syllabusService.getActiveExam();
@@ -173,109 +280,64 @@ function getSyllabusRecommendations() {
 
     if (!subjects.length) return [];
 
-    const recs = [];
-
-    // ── No progress at all ────────────────────────────────────────────────
+    // ── No progress at all — agent-specific onboarding nudge ───────────────
     if ((examProgress.done ?? 0) === 0) {
-      recs.push({
-        agent: "coach",
-        title: "Start Your Syllabus Tracker",
-        description: `You haven't tracked any ${examId.replace("_", " ").toUpperCase()} topics yet. Opening a subject and marking your first topic done takes 10 seconds — and seeds your study roadmap.`,
-        category: "syllabus",
-        priority: 74,
-        icon: "📚",
-        color: "#7C6FFF",
-        action: { label: "Open Syllabus", path: "/syllabus" },
-      });
-      return recs;
+      return [
+        {
+          agent: "coach",
+          title: "Start Your Syllabus Tracker",
+          description: `You haven't tracked any ${examId.replace("_", " ").toUpperCase()} topics yet. Opening a subject and marking your first topic done takes 10 seconds — and seeds your study roadmap.`,
+          category: "syllabus",
+          priority: 74,
+          icon: "📚",
+          color: "#7C6FFF",
+          action: { label: "Open Syllabus", path: "/syllabus" },
+        },
+      ];
     }
 
-    // ── Revision queue: subjects with flagged topics ───────────────────────
-    const needsRevision = subjects
-      .filter((s) => (s.progress?.revisionNeeded ?? 0) > 0)
-      .sort(
-        (a, b) =>
-          (b.progress.revisionNeeded ?? 0) - (a.progress.revisionNeeded ?? 0),
-      );
+    // ── Assemble canonical pipeline inputs (existing utilities only) ───────
+    const activityLog = syllabusService.getActivityLog(500);
+    const quizHistory = getQuizHistory() ?? [];
+    const revisionQueue = syllabusService.getTodayRevisionQueue(examId);
+    const gapItems = analyzeKnowledgeGaps(subjects, quizHistory);
 
-    if (needsRevision.length > 0) {
-      const top = needsRevision[0];
-      const count = top.progress.revisionNeeded;
-      recs.push({
-        agent: "coach",
-        title: `Review Queue: ${top.label}`,
-        description: `${count} topic${count > 1 ? "s are" : " is"} flagged for revision in ${top.label}. Clearing your review queue now prevents knowledge gaps on exam day.`,
-        category: "syllabus",
-        priority: 83,
-        icon: top.emoji ?? "🔁",
-        color: "#FF6B2B",
-        action: { label: "Review Now", path: "/syllabus" },
-      });
-    }
+    const recommendations = generateRecommendations({
+      subjectProgress: subjects,
+      examProgress,
+      activityLog,
+      quizHistory,
+      revisionQueue,
+      gapItems,
+    });
 
-    // ── Almost complete: ≥80% but <100% ──────────────────────────────────
-    const almostDone = subjects
-      .filter(
-        (s) => (s.progress?.pct ?? 0) >= 80 && (s.progress?.pct ?? 0) < 100,
-      )
-      .sort((a, b) => (b.progress.pct ?? 0) - (a.progress.pct ?? 0));
+    const context = {
+      subjectProgress: subjects,
+      activityLog,
+      revisionQueue,
+    };
 
-    if (almostDone.length > 0) {
-      const top = almostDone[0];
-      const remaining = (top.progress.total ?? 0) - (top.progress.done ?? 0);
-      recs.push({
-        agent: "coach",
-        title: `Almost Done: ${top.label}`,
-        description: `${top.label} is ${top.progress.pct}% complete — only ${remaining} topic${remaining > 1 ? "s" : ""} left. Finishing it unlocks a +200 XP subject completion bonus.`,
-        category: "syllabus",
-        priority: 79,
-        icon: top.emoji ?? "🎯",
-        color: top.color ?? "#00FFC8",
-        action: { label: "Finish Subject", path: "/syllabus" },
-      });
-    }
+    const CANONICAL_SYLLABUS_TYPES = new Set([
+      REC_TYPE.HIGH_RISK_SUBJECT,
+      REC_TYPE.NEGLECTED_SUBJECT,
+      REC_TYPE.LOW_COMPLETION,
+      REC_TYPE.MOMENTUM,
+    ]);
 
-    // ── Lagging: has some progress but <40% ──────────────────────────────
-    const lagging = subjects
-      .filter((s) => (s.progress?.done ?? 0) > 0 && (s.progress?.pct ?? 0) < 40)
-      .sort((a, b) => (a.progress?.pct ?? 0) - (b.progress?.pct ?? 0));
+    // Already ranked by the canonical pipeline — relative order preserved,
+    // not re-sorted here.
+    const canonicalRecs = recommendations
+      .filter((rec) => CANONICAL_SYLLABUS_TYPES.has(rec.type))
+      .map((rec) => _adaptCanonicalRecommendation(rec, context, "syllabus"));
 
-    if (lagging.length > 0) {
-      const top = lagging[0];
-      const left = (top.progress.total ?? 0) - (top.progress.done ?? 0);
-      recs.push({
-        agent: "coach",
-        title: `Push Through: ${top.label}`,
-        description: `${top.label} is only ${top.progress.pct}% done with ${left} topics remaining. Steady daily effort on this subject will make a significant dent in your coverage.`,
-        category: "syllabus",
-        priority: 68,
-        icon: top.emoji ?? "⚡",
-        color: top.color ?? "#FFB347",
-        action: { label: "Continue Subject", path: "/syllabus" },
-      });
-    }
+    const almostDoneRec = _buildAlmostDoneRecommendation(subjects);
 
-    // ── Neglected: zero progress while others have been started ──────────
-    const neglected = subjects.filter((s) => (s.progress?.done ?? 0) === 0);
-    const started = subjects.filter((s) => (s.progress?.done ?? 0) > 0);
-
-    if (neglected.length > 0 && started.length > 0) {
-      const pick =
-        neglected[Math.floor(Math.random() * Math.min(neglected.length, 3))];
-      recs.push({
-        agent: "coach",
-        title: `Unexplored: ${pick.label}`,
-        description: `You haven't started ${pick.label} yet. Broadening coverage across subjects is key to competitive exam success — even 2-3 topics a day adds up fast.`,
-        category: "syllabus",
-        priority: 60,
-        icon: pick.emoji ?? "🗺️",
-        color: pick.color ?? "#4FC3F7",
-        action: { label: "Start Subject", path: "/syllabus" },
-      });
-    }
+    const combined = almostDoneRec
+      ? [almostDoneRec, ...canonicalRecs]
+      : canonicalRecs;
 
     // Cap at 3 so syllabus doesn't dominate the recommendation feed
-    return recs.slice(0, 3);
+    return combined.slice(0, 3);
   } catch {
     // Never break the existing recommendation pipeline
     return [];
@@ -283,6 +345,7 @@ function getSyllabusRecommendations() {
 }
 
 // ─── PHASE 31: PRIVATE REVISION INSIGHT BUILDER ──────────────────────────────
+// NOT modified in this batch — deferred to Phase 37 Batch F.2.
 
 /**
  * _buildRevisionInsight
@@ -332,93 +395,57 @@ function _buildRevisionInsight() {
   }
 }
 
-// ─── PHASE 31: SPACED REVISION RECOMMENDATIONS ───────────────────────────────
+// ─── PHASE 31 → MIGRATED PHASE 37 BATCH F.1: SPACED REVISION RECOMMENDATIONS ─
 
 /**
  * getSpacedRevisionRecommendations
  *
- * Returns 0–3 high-priority recommendation objects based on the current
- * state of the spaced-repetition schedule.
+ * Phase 37 Batch F.1: this function no longer independently reads
+ * syllabusService.getRevisionStats() or hardcodes revision priorities
+ * (95/88/55/50). It now delegates entirely to
+ * studyRecommendationEngine.generateRecommendations(), filters for
+ * REC_TYPE.REVISION_DUE (the canonical overdue/due-today revision
+ * recommendation), and adapts each into the existing agent-feed shape
+ * via _adaptCanonicalRecommendation() — with priority sourced from
+ * recommendationPrioritization.getRecommendationScore(), the same
+ * canonical, already-established scoring API every other pipeline
+ * consumer uses.
  *
- * Priority order (highest first):
- *   1. Overdue revisions     → VERY HIGH (95)
- *   2. Due today revisions   → HIGH (88)
- *   3. Graduated milestone   → MEDIUM (55)
- *   4. Empty pipeline        → MEDIUM (50)
+ * The former "graduated milestone" and "empty pipeline" cases (which had
+ * no canonical equivalent) are not reimplemented here — they were
+ * agent-invented framing of stats already covered elsewhere in the
+ * revision architecture, out of this batch's delegation scope.
  *
- * Slotted into the recommendation feed ABOVE syllabus coverage recs
- * when conditions are met. Never crashes — wrapped in try/catch.
+ * Never crashes — wrapped in try/catch; returns [] on any failure,
+ * matching the existing defensive contract exactly (no fallback
+ * recommendation engine is recreated).
  *
- * @returns {Array} recommendation objects
+ * @returns {Array} recommendation objects (0–2 items: overdue, due-today)
  */
 function getSpacedRevisionRecommendations() {
   try {
     const examId = syllabusService.getActiveExam();
-    const stats = syllabusService.getRevisionStats(examId);
+    const subjectProgress = syllabusService.getAllSubjectProgress(examId);
+    const examProgress = syllabusService.getExamProgress(examId);
+    const activityLog = syllabusService.getActivityLog(500);
+    const quizHistory = getQuizHistory() ?? [];
+    const revisionQueue = syllabusService.getTodayRevisionQueue(examId);
+    const gapItems = analyzeKnowledgeGaps(subjectProgress, quizHistory);
 
-    if (!stats) return [];
+    const recommendations = generateRecommendations({
+      subjectProgress,
+      examProgress,
+      activityLog,
+      quizHistory,
+      revisionQueue,
+      gapItems,
+    });
 
-    const { overdueCount, dueToday, graduatedCount, totalScheduled } = stats;
-    const recs = [];
+    const context = { subjectProgress, activityLog, revisionQueue };
 
-    // ── 1. Overdue revisions — VERY HIGH PRIORITY ─────────────────────────
-    if ((overdueCount ?? 0) > 0) {
-      recs.push({
-        agent: "coach",
-        title: `🔥 ${overdueCount} Overdue Revision${overdueCount > 1 ? "s" : ""}`,
-        description: `You have ${overdueCount} topic${overdueCount > 1 ? "s" : ""} past their scheduled revision date. Clear these first — reviewing overdue topics now before studying new material is the single most effective action you can take today.`,
-        category: "revision",
-        priority: 95,
-        icon: "🔥",
-        color: "#FF6B2B",
-        action: { label: "Review Overdue", path: "/syllabus" },
-      });
-    }
-
-    // ── 2. Topics due today ───────────────────────────────────────────────
-    if ((dueToday ?? 0) > 0) {
-      recs.push({
-        agent: "coach",
-        title: `📚 ${dueToday} Revision${dueToday > 1 ? "s" : ""} Scheduled Today`,
-        description: `You have ${dueToday} topic${dueToday > 1 ? "s" : ""} scheduled for spaced-repetition review today. Completing them advances each topic's revision level and locks in long-term retention.`,
-        category: "revision",
-        priority: 88,
-        icon: "📚",
-        color: "#FFB347",
-        action: { label: "Today's Revisions", path: "/syllabus" },
-      });
-    }
-
-    // ── 3. Graduated milestone ────────────────────────────────────────────
-    if ((graduatedCount ?? 0) >= 10) {
-      recs.push({
-        agent: "coach",
-        title: `🏆 ${graduatedCount} Topics Fully Graduated`,
-        description: `${graduatedCount} topics have cleared all 5 spaced-repetition revision levels. This is exceptional consistency — your long-term retention for these topics is now well established.`,
-        category: "revision",
-        priority: 55,
-        icon: "🏆",
-        color: "#FFD700",
-        action: { label: "View Syllabus", path: "/syllabus" },
-      });
-    }
-
-    // ── 4. Empty pipeline — prompt to complete first topics ───────────────
-    if ((totalScheduled ?? 0) === 0) {
-      recs.push({
-        agent: "coach",
-        title: "Activate Smart Revision Scheduling",
-        description:
-          "Mark your first syllabus topic as completed to activate the spaced repetition engine. Each completed topic is automatically scheduled for future revision at the optimal interval.",
-        category: "revision",
-        priority: 50,
-        icon: "🗓️",
-        color: "#4FC3F7",
-        action: { label: "Open Syllabus", path: "/syllabus" },
-      });
-    }
-
-    return recs;
+    return recommendations
+      .filter((rec) => rec.type === REC_TYPE.REVISION_DUE)
+      .map((rec) => _adaptCanonicalRecommendation(rec, context, "revision"));
   } catch {
     // Never break the recommendation pipeline
     return [];
