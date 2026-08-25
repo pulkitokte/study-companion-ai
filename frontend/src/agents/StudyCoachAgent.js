@@ -18,6 +18,10 @@ import {
   REC_TYPE,
 } from "../utils/studyRecommendationEngine.js";
 import { getRecommendationScore } from "../utils/recommendationPrioritization.js";
+import {
+  buildRevisionSummary,
+  REVISION_URGENCY,
+} from "../utils/revisionIntelligence.js";
 
 // ─── LEARNING ANALYSIS ────────────────────────────────────────────────────────
 function analyzeLearning(stats = null) {
@@ -271,6 +275,8 @@ function _buildAlmostDoneRecommendation(subjects) {
  *
  * The "no progress at all" onboarding nudge is preserved unchanged — it
  * is agent-specific presentation with no canonical equivalent.
+ *
+ * UNCHANGED in Phase 37 Batch F.2.
  */
 function getSyllabusRecommendations() {
   try {
@@ -344,39 +350,61 @@ function getSyllabusRecommendations() {
   }
 }
 
-// ─── PHASE 31: PRIVATE REVISION INSIGHT BUILDER ──────────────────────────────
-// NOT modified in this batch — deferred to Phase 37 Batch F.2.
+// ─── PHASE 31 → MIGRATED PHASE 37 BATCH F.2: PRIVATE REVISION INSIGHT ────────
 
 /**
  * _buildRevisionInsight
  *
- * Reads spaced-repetition stats and returns a plain-text insight string
- * for injection into getDailyBriefing() → revisionInsight field.
+ * Phase 37 Batch F.2: no longer reads syllabusService.getRevisionStats()
+ * directly nor independently classifies revision urgency/emptiness. The
+ * canonical revision state now comes from
+ * revisionIntelligence.buildRevisionSummary(revisionQueue, revisionStats)
+ * — the same interpretation layer every other revision consumer
+ * (RevisionView, dashboardMissionEngine, studyRecommendationEngine) uses.
  *
- * Returns null when no revision data exists yet (safe default).
+ * This function's remaining responsibility is purely conversational:
+ * translating the canonical urgencyLevel / emptyState / overdueCount /
+ * dueTodayCount / graduatedCount fields into natural prose. The
+ * dueTodayCount > 5 "primarily a revision day" split and both graduation-
+ * count narrative tiers (≥20, ≥10) are agent-specific presentation
+ * decisions layered on top of already-canonical state — they do not
+ * redefine urgency or introduce a second revision classification.
+ *
+ * Returns a plain-text insight string for injection into
+ * getDailyBriefing() → revisionInsight field.
+ *
+ * Returns null when no topic has ever entered the spaced-repetition
+ * schedule (revisionIntelligence's 'no-schedule' empty state) — the same
+ * safe default as before.
+ *
  * Never throws — wrapped in try/catch.
  */
 function _buildRevisionInsight() {
   try {
     const examId = syllabusService.getActiveExam();
-    const stats = syllabusService.getRevisionStats(examId);
+    const revisionQueue = syllabusService.getTodayRevisionQueue(examId);
+    const revisionStats = syllabusService.getRevisionStats(examId);
 
-    if (!stats || (stats.totalScheduled ?? 0) === 0) return null;
+    const summary = buildRevisionSummary(revisionQueue, revisionStats);
 
-    const { overdueCount, dueToday, graduatedCount, totalScheduled } = stats;
+    if (summary.emptyState === "no-schedule") return null;
 
-    if (overdueCount > 0) {
+    const { overdueCount, dueTodayCount, graduatedCount, urgencyLevel } =
+      summary;
+
+    if (urgencyLevel === REVISION_URGENCY.CRITICAL) {
       return `Your revision backlog needs immediate attention — ${overdueCount} topic${overdueCount > 1 ? "s are" : " is"} overdue. Focus on clearing these before studying anything new.`;
     }
 
-    if (dueToday > 5) {
-      return `Today should primarily be a revision day — ${dueToday} topics are scheduled for review. Completing them advances your spaced-repetition progress significantly.`;
+    if (urgencyLevel === REVISION_URGENCY.HIGH) {
+      if (dueTodayCount > 5) {
+        return `Today should primarily be a revision day — ${dueTodayCount} topics are scheduled for review. Completing them advances your spaced-repetition progress significantly.`;
+      }
+      return `You have ${dueTodayCount} topic${dueTodayCount > 1 ? "s" : ""} scheduled for revision today. Reviewing them now keeps your retention curve strong.`;
     }
 
-    if (dueToday > 0) {
-      return `You have ${dueToday} topic${dueToday > 1 ? "s" : ""} scheduled for revision today. Reviewing them now keeps your retention curve strong.`;
-    }
-
+    // urgencyLevel === REVISION_URGENCY.NONE — agent-specific graduation
+    // narrative (revisionIntelligence has no opinion on this prose).
     if (graduatedCount >= 20) {
       return `Excellent long-term retention habits — ${graduatedCount} topics have cleared all 5 revision levels. Your knowledge foundation is exceptionally solid.`;
     }
@@ -385,11 +413,7 @@ function _buildRevisionInsight() {
       return `Strong revision consistency — ${graduatedCount} topics are fully graduated. Keep up the spaced repetition to lock in long-term retention.`;
     }
 
-    if (totalScheduled > 0) {
-      return `Your revision pipeline is on track — no topics are overdue right now. Keep completing new topics to grow the schedule.`;
-    }
-
-    return null;
+    return `Your revision pipeline is on track — no topics are overdue right now. Keep completing new topics to grow the schedule.`;
   } catch {
     return null;
   }
@@ -400,21 +424,11 @@ function _buildRevisionInsight() {
 /**
  * getSpacedRevisionRecommendations
  *
- * Phase 37 Batch F.1: this function no longer independently reads
- * syllabusService.getRevisionStats() or hardcodes revision priorities
- * (95/88/55/50). It now delegates entirely to
- * studyRecommendationEngine.generateRecommendations(), filters for
- * REC_TYPE.REVISION_DUE (the canonical overdue/due-today revision
- * recommendation), and adapts each into the existing agent-feed shape
- * via _adaptCanonicalRecommendation() — with priority sourced from
- * recommendationPrioritization.getRecommendationScore(), the same
- * canonical, already-established scoring API every other pipeline
- * consumer uses.
- *
- * The former "graduated milestone" and "empty pipeline" cases (which had
- * no canonical equivalent) are not reimplemented here — they were
- * agent-invented framing of stats already covered elsewhere in the
- * revision architecture, out of this batch's delegation scope.
+ * UNCHANGED in Phase 37 Batch F.2 — this function was migrated in
+ * Batch F.1 to delegate entirely to
+ * studyRecommendationEngine.generateRecommendations(), filtering for
+ * REC_TYPE.REVISION_DUE and adapting via _adaptCanonicalRecommendation(),
+ * with priority sourced from recommendationPrioritization.getRecommendationScore().
  *
  * Never crashes — wrapped in try/catch; returns [] on any failure,
  * matching the existing defensive contract exactly (no fallback
