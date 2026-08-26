@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Timer, BarChart3, Clock, Trophy, BookOpen } from "lucide-react";
+import { Timer, BarChart3, Clock, Trophy, BookOpen, Sparkles } from "lucide-react";
 import {
   FocusProvider,
   useFocus,
@@ -20,6 +20,7 @@ import {
   startFocusSyllabusSession,
   clearFocusSyllabusSession,
 } from "../utils/focusSyllabusSession.js";
+import { useStudyPlan } from "../hooks/useStudyPlan.js";
 
 const TABS = [
   { id: "home", label: "Focus", icon: Timer },
@@ -30,7 +31,18 @@ const TABS = [
 
 // ─── STUDY CONTEXT CARD ───────────────────────────────────────────────────────
 
-function StudyContextCard({ subjects, value, onChange }) {
+/**
+ * Phase 37 Batch H.1: optional Study Plan suggestion.
+ *
+ * `suggestedSubject` is either null (no valid, subject-bearing top
+ * priority item exists) or { id, label, title } where id/label come from
+ * the currently loaded syllabus subject list and title is the Study
+ * Plan item's own headline. Purely informational — clicking "Use
+ * Suggestion" only calls onChange(id), identical to picking that same
+ * subject from the dropdown. Nothing here starts a session, writes to
+ * storage, or overrides manual selection automatically.
+ */
+function StudyContextCard({ subjects, value, onChange, suggestedSubject }) {
   const hasSubjects = subjects.length > 0;
 
   return (
@@ -129,6 +141,39 @@ function StudyContextCard({ subjects, value, onChange }) {
           </button>
         </motion.div>
       )}
+
+      {/* Phase 37 Batch H.1: Study Plan suggestion — informational only,
+          never auto-applied, never blocks manual selection. */}
+      {suggestedSubject && suggestedSubject.id !== value && (
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-white/[0.05]"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Sparkles size={12} className="text-[#00FFC8] shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[9px] text-[#00FFC8]/70 font-bold uppercase tracking-wider">
+                Study Plan Suggestion
+              </p>
+              <p className="text-[11px] text-white/55 truncate">
+                {suggestedSubject.title}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onChange(suggestedSubject.id)}
+            className="shrink-0 text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-all"
+            style={{
+              borderColor: "rgba(0,255,200,0.30)",
+              color: "#00FFC8",
+              background: "rgba(0,255,200,0.06)",
+            }}
+          >
+            Use Suggestion
+          </button>
+        </motion.div>
+      )}
     </motion.div>
   );
 }
@@ -182,6 +227,38 @@ function FocusShell() {
       setSubjects([]);
     }
   }, []);
+
+  // ── Phase 37 Batch H.1: Study Plan suggestion (read-only) ────────────────
+  // Reuses the existing active-exam value already obtained above — no new
+  // exam-lookup mechanism. useStudyPlan already subscribes to the existing
+  // syllabus synchronization architecture (useRevisionQueue +
+  // useSyllabusSyncListener) — no new sync system is introduced here.
+  const { topPriorityItem, loading: planLoading } = useStudyPlan(activeExam);
+
+  // Derived, not stored in state — recomputed each render from the current
+  // plan + subject list, but NEVER written into selectedSubjectId. This is
+  // what guarantees the suggestion can update on Study Plan refresh without
+  // ever overwriting the user's manual selection.
+  const suggestedSubject = useMemo(() => {
+    try {
+      if (planLoading) return null;
+      if (!topPriorityItem) return null;
+      // REVISION_DUE (and any other aggregated item) has subjectId === null
+      // by design — no guess is made here; this simply excludes it.
+      if (!topPriorityItem.subjectId) return null;
+
+      const match = subjects.find((s) => s.id === topPriorityItem.subjectId);
+      if (!match) return null;
+
+      return {
+        id: match.id,
+        label: match.label,
+        title: topPriorityItem.title,
+      };
+    } catch {
+      return null;
+    }
+  }, [planLoading, topPriorityItem, subjects]);
 
   // Watch for the transition from home into the session flow.
   // When phase enters "setup", persist the chosen syllabus context
@@ -308,6 +385,7 @@ function FocusShell() {
                 subjects={subjects}
                 value={selectedSubjectId}
                 onChange={setSelectedSubjectId}
+                suggestedSubject={suggestedSubject}
               />
               <FocusHome onAnalyticsClick={() => setView("analytics")} />
             </div>
