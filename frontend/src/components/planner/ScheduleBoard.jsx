@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Clock, X, ChevronDown } from "lucide-react";
 import {
@@ -10,7 +10,7 @@ import {
 } from "../../utils/plannerStorage.js";
 import TaskCard from "./TaskCard.jsx";
 import { useToast } from "../ui/Toast.jsx";
-import { syncTaskCompletionToSyllabus } from '../../utils/plannerSyllabusSync.js'
+import { syncTaskCompletionToSyllabus } from "../../utils/plannerSyllabusSync.js";
 
 const SUBJECTS = [
   "Polity",
@@ -25,13 +25,31 @@ const SUBJECTS = [
   "English",
 ];
 
-function AddTaskModal({ dateStr, onClose, onAdded }) {
+/**
+ * AddTaskModal
+ *
+ * Phase 37 Batch I.3: now accepts two OPTIONAL props for the Study Plan
+ * handoff — `initialValues` ({title?, subject?, priority?}) and
+ * `provenance` ({source?, studyPlanRef?}). When absent (the normal "Add
+ * Task" button flow), the modal behaves EXACTLY as before — blank form,
+ * no provenance attached on save. No duration/XP/date/time value is ever
+ * pre-filled from a Study Plan handoff; those remain entirely
+ * user-controlled, and `dateStr` remains the sole source of the task's
+ * date, unchanged.
+ */
+function AddTaskModal({
+  dateStr,
+  onClose,
+  onAdded,
+  initialValues,
+  provenance,
+}) {
   const { show } = useToast();
-  const [title, setTitle] = useState("");
-  const [subj, setSubj] = useState("");
+  const [title, setTitle] = useState(initialValues?.title ?? "");
+  const [subj, setSubj] = useState(initialValues?.subject ?? "");
   const [time, setTime] = useState("09:00");
   const [dur, setDur] = useState(60);
-  const [pri, setPri] = useState("medium");
+  const [pri, setPri] = useState(initialValues?.priority ?? "medium");
   const [xp, setXp] = useState(100);
 
   const handleAdd = () => {
@@ -44,6 +62,15 @@ function AddTaskModal({ dateStr, onClose, onAdded }) {
       duration: dur,
       priority: pri,
       xp,
+      // Phase 37 Batch I.3: attach provenance only when this modal was
+      // opened from a Study Plan handoff. Manual task creation never
+      // sets these, so `addTask` persists them as null exactly as before.
+      ...(provenance
+        ? {
+            source: provenance.source ?? null,
+            studyPlanRef: provenance.studyPlanRef ?? null,
+          }
+        : {}),
     });
     show({
       type: "mission",
@@ -205,20 +232,64 @@ function AddTaskModal({ dateStr, onClose, onAdded }) {
   );
 }
 
-export default function ScheduleBoard({ dateStr }) {
+/**
+ * ScheduleBoard
+ *
+ * Phase 37 Batch I.3: accepts two new OPTIONAL props —
+ * `pendingPrefill` (the parsed Study Plan handoff payload, or null) and
+ * `onPrefillConsumed` (called once the prefill has been loaded into the
+ * task-creation flow — NOT once a task is created). When `pendingPrefill`
+ * is absent, this component behaves exactly as before.
+ *
+ * "Consumed" here means the modal has been opened with the prefill data
+ * — the parent (Planner.jsx) is notified so it can clear its own
+ * in-memory copy and avoid reopening the modal again on unrelated
+ * re-renders. If the user cancels, no task is created — the prefill
+ * simply disappears with the modal, exactly like an ordinary abandoned
+ * "Add Task" flow.
+ */
+export default function ScheduleBoard({
+  dateStr,
+  pendingPrefill = null,
+  onPrefillConsumed,
+}) {
   const [tasks, setTasks] = useState(() => getTasks(dateStr));
   const [showAdd, setShowAdd] = useState(false);
+  const [modalPrefill, setModalPrefill] = useState(null);
+
+  // Phase 37 Batch I.3: auto-open the Add Task modal, pre-filled, when a
+  // pending Study Plan handoff arrives. This never creates a task by
+  // itself — it only opens the existing creation flow with values
+  // already entered, exactly as if the user had typed them in.
+  useEffect(() => {
+    if (!pendingPrefill) return;
+    setModalPrefill({
+      initialValues: {
+        title: pendingPrefill.title,
+        subject: pendingPrefill.subject,
+        priority: pendingPrefill.priority,
+      },
+      provenance: pendingPrefill.provenance,
+    });
+    setShowAdd(true);
+    onPrefillConsumed?.();
+  }, [pendingPrefill, onPrefillConsumed]);
 
   const refresh = () => setTasks(getTasks(dateStr));
 
- const handleToggle = (id) => {
-   const task = tasks.find((t) => t.id === id);
-   toggleTask(id);
-   if (task && !task.done) {
-     syncTaskCompletionToSyllabus({ ...task, done: true });
-   }
-   refresh();
- };
+  const handleCloseModal = () => {
+    setShowAdd(false);
+    setModalPrefill(null);
+  };
+
+  const handleToggle = (id) => {
+    const task = tasks.find((t) => t.id === id);
+    toggleTask(id);
+    if (task && !task.done) {
+      syncTaskCompletionToSyllabus({ ...task, done: true });
+    }
+    refresh();
+  };
   const handleDelete = (id) => {
     deleteTask(id);
     refresh();
@@ -245,8 +316,10 @@ export default function ScheduleBoard({ dateStr }) {
         {showAdd && (
           <AddTaskModal
             dateStr={dateStr}
-            onClose={() => setShowAdd(false)}
+            onClose={handleCloseModal}
             onAdded={refresh}
+            initialValues={modalPrefill?.initialValues}
+            provenance={modalPrefill?.provenance}
           />
         )}
       </AnimatePresence>

@@ -15,35 +15,37 @@ import FocusMeterCard from "./FocusMeterCard.jsx";
 /**
  * Phase 37 Batch E.2 — Command Center Migration to Unified Study Plan
  *
- * The "what should I study now?" mission decision is now sourced from
+ * The "what should I study now?" mission decision is sourced from
  * useStudyPlan(examId).topPriorityItem — the canonical orchestration
  * result of studyRecommendationEngine → recommendationPrioritization →
- * studyPlanEngine (with the Phase 37 Batch E.1 revision-precedence
- * reconciliation already applied inside recommendationPrioritization.js,
- * and the Phase 37 Batch E.1 Hotfix circular-dependency fix applied via
- * recommendationConstants.js — both fully transparent to this component).
+ * studyPlanEngine.
  *
- * dashboardMissionEngine.buildDashboardMission() is no longer called by
- * this component. dashboardMissionEngine.js itself is untouched and
- * remains available as a legacy path per this batch's instructions —
- * buildTodayProgress()/buildFocusScore() (Today Progress / Focus Meter,
- * which are NOT part of the Study Plan's responsibility) are still
- * imported and used exactly as before.
+ * Phase 37 Batch I.3 — Study Plan → Planner Handoff
  *
- * ADAPTER: _adaptPlanItemToMission() below exists purely for presentation
- * compatibility with the existing MissionCard component — it performs no
- * recommendation logic, ranking, or scoring of its own. It only renames/
- * reshapes fields already computed by studyPlanEngine into the shape
- * MissionCard has always consumed.
+ * Adds an ADDITIVE secondary action, "Add to Planner", rendered
+ * alongside (not inside) the existing MissionCard. Clicking it does NOT
+ * create a Planner task — it writes a small, namespaced sessionStorage
+ * handoff (containing only title/subject/priority/provenance — never
+ * duration, XP, date, or time, none of which the Study Plan has any
+ * opinion about) and navigates to the existing /planner route via the
+ * same `onNavigate` prop the existing mission CTA already uses. Planner
+ * itself remains solely responsible for scheduling and requires
+ * explicit user confirmation before any task is actually created.
+ *
+ * MissionCard.jsx is NOT modified — this new action lives entirely in
+ * CommandCenter's own markup.
  */
+
+// Phase 37 Batch I.3: namespaced sessionStorage key for the one-shot
+// Study Plan → Planner handoff. Matches the existing "studymind_" prefix
+// convention already used elsewhere (e.g. studymind_syllabus_initial_tab).
+const STUDY_PLAN_PLANNER_PREFILL_KEY = "studymind_study_plan_planner_prefill";
 
 // ─── PRESENTATION-ONLY FALLBACK ────────────────────────────────────────────
 // Mirrors the shape (not the logic) of studyPlanEngine's own internal
 // FALLBACK_ITEM / dashboardMissionEngine's legacy FALLBACK, so MissionCard
 // always has a safe, non-null mission to render — including on the very
-// first render before useStudyPlan's initial build completes, and safely
-// covering "no active exam" / "empty plan" / "topPriorityItem is null"
-// cases without fabricating a recommendation.
+// first render before useStudyPlan's initial build completes.
 const FALLBACK_MISSION = {
   emoji: "📘",
   title: "Start Your Study Session",
@@ -83,12 +85,33 @@ function _adaptPlanItemToMission(item) {
 }
 
 /**
+ * _mapUrgencyToPlannerPriority
+ *
+ * Small, local, conservative mapping from the Study Plan's urgency tiers
+ * to Planner's existing three priority values. Does not touch, alter, or
+ * duplicate any canonical recommendation/prioritization weighting — this
+ * is purely a presentation-layer conversion for the handoff payload.
+ */
+function _mapUrgencyToPlannerPriority(urgencyLevel) {
+  switch (urgencyLevel) {
+    case "CRITICAL":
+    case "HIGH":
+      return "high";
+    case "MEDIUM":
+      return "medium";
+    case "POSITIVE":
+    default:
+      return "low";
+  }
+}
+
+/**
  * CommandCenter
  *
  * Central composition component for the Dashboard Command Center.
  * Orchestrates all four cards. Today Progress and Focus Meter remain
  * fully prop-driven (unrelated to the Study Plan). The mission card is
- * now powered by useStudyPlan(examId) internally.
+ * powered by useStudyPlan(examId) internally.
  *
  * Props:
  *   revisionQueue    {Array}   syllabusService.getTodayRevisionQueue(examId)
@@ -100,9 +123,8 @@ function _adaptPlanItemToMission(item) {
  *                               — no longer consumed here; the canonical
  *                               studyRecommendationEngine pipeline (via
  *                               useStudyPlan) is now the sole mission
- *                               authority, per the Phase 37 architecture
- *                               reconciliation. Retained as an accepted
- *                               prop for backward compatibility with
+ *                               authority. Retained as an accepted prop
+ *                               for backward compatibility with
  *                               Dashboard.jsx, which is left unmodified.
  *   subjectProgress  {Array}   syllabusService.getAllSubjectProgress(examId)
  *                               — no longer used directly here (useStudyPlan
@@ -134,11 +156,13 @@ export default function CommandCenter({
     }
   }, []);
 
-  // ── Phase 37 Batch E.2: the Unified Study Plan is now the sole source
-  // of the mission decision. useStudyPlan already reuses useRevisionQueue
-  // + useSyllabusSyncListener internally — no new sync mechanism is added
+  // ── Phase 37 Batch E.2: the Unified Study Plan is the sole source of
+  // the mission decision. useStudyPlan already reuses useRevisionQueue +
+  // useSyllabusSyncListener internally — no new sync mechanism is added
   // here, and the plan refreshes automatically through that existing
-  // architecture. ───────────────────────────────────────────────────────
+  // architecture. `topPriorityItem` (the raw hook value, before
+  // adaptation) is also reused below to validate the "Add to Planner"
+  // action — no second Study Plan read is introduced. ─────────────────────
   const { topPriorityItem, loading: planLoading } = useStudyPlan(examId);
 
   const mission = useMemo(
@@ -158,9 +182,56 @@ export default function CommandCenter({
     [todayProgress, activityLog, revisionQueue.length],
   );
 
-  // ── Mission CTA handler ────────────────────────────────────────────────────
+  // ── Mission CTA handler (existing, unchanged) ─────────────────────────
   const handleMissionAction = (m) => {
     onNavigate?.(m.actionPath, m.actionTab);
+  };
+
+  // ── Phase 37 Batch I.3: "Add to Planner" — additive secondary action.
+  // Never creates a Planner task directly. Writes only the minimal
+  // prefill/provenance payload the Planner needs, then navigates to the
+  // existing /planner route. Fails safely (no fatal UI error) if
+  // sessionStorage is unavailable — navigation still proceeds, and
+  // Planner simply shows its normal, un-prefilled flow in that case. ────
+  const canAddToPlanner = !planLoading && !!topPriorityItem;
+
+  const handleAddToPlanner = () => {
+    if (!topPriorityItem) return;
+
+    try {
+      const priority = _mapUrgencyToPlannerPriority(
+        topPriorityItem.urgencyLevel,
+      );
+
+      const payload = {
+        title: topPriorityItem.title || FALLBACK_MISSION.title,
+        subject: topPriorityItem.subjectLabel ?? "",
+        priority,
+        provenance: {
+          source: "studyPlan",
+          studyPlanRef: {
+            type: topPriorityItem.type ?? null,
+            examId: examId ?? null,
+            subjectId: topPriorityItem.subjectId ?? null,
+            // studyPlanEngine's PlanItem shape does not currently carry a
+            // topicId — never invented here, always null.
+            topicId: null,
+          },
+        },
+        createdAt: new Date().toISOString(),
+      };
+
+      sessionStorage.setItem(
+        STUDY_PLAN_PLANNER_PREFILL_KEY,
+        JSON.stringify(payload),
+      );
+    } catch {
+      // sessionStorage unavailable or serialization failed — fail safely.
+      // Navigation still proceeds below; Planner will simply open without
+      // a prefill in that case.
+    }
+
+    onNavigate?.("/planner");
   };
 
   return (
@@ -189,12 +260,27 @@ export default function CommandCenter({
       {/* ── Card grid ─────────────────────────────────────────────────── */}
       {/* Row 1: Mission (full width on mobile, 2/3 on larger) + Focus Meter */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="sm:col-span-2">
+        <div className="sm:col-span-2 space-y-2">
           <MissionCard
             mission={mission}
             onAction={handleMissionAction}
             loading={planLoading}
           />
+          {canAddToPlanner && (
+            <div className="flex justify-end">
+              <button
+                onClick={handleAddToPlanner}
+                className="text-[11px] font-bold px-3 py-1.5 rounded-lg border transition-all"
+                style={{
+                  borderColor: "rgba(124,111,255,0.30)",
+                  color: "#7C6FFF",
+                  background: "rgba(124,111,255,0.06)",
+                }}
+              >
+                Add to Planner
+              </button>
+            </div>
+          )}
         </div>
         <div className="sm:col-span-1">
           <FocusMeterCard focusScore={focusScore} />

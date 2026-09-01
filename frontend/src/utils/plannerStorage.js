@@ -36,6 +36,20 @@ export function getTasks(dateStr) {
   return tasks.filter((t) => t.date === dateStr);
 }
 
+/**
+ * addTask
+ *
+ * Phase 37 Batch I.3: now optionally preserves `source` and `studyPlanRef`
+ * when supplied, so a task originating from the Unified Study Plan
+ * handoff can carry structured provenance through the same creation
+ * path every manually-created task already uses.
+ *
+ * Backward compatible: both fields default to null when absent, exactly
+ * as every existing caller (manual AddTaskModal submissions,
+ * generateDefaultTasks) already behaves — no existing task or consumer
+ * is affected. The explicit-field approach is preserved; arbitrary
+ * unknown properties on `task` are still never persisted.
+ */
 export function addTask(task) {
   const data = getPlanner();
   const entry = {
@@ -50,6 +64,9 @@ export function addTask(task) {
     done: false,
     notes: task.notes ?? "",
     createdAt: new Date().toISOString(),
+    // Phase 37 Batch I.3: optional provenance passthrough.
+    source: task.source ?? null,
+    studyPlanRef: task.studyPlanRef ?? null,
   };
   data.tasks = [entry, ...data.tasks];
   savePlanner(data);
